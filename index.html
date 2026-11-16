@@ -134,17 +134,26 @@
           <h2 id="hourly-heading" class="section-title">Next 24 Hours</h2>
           <p id="hourly-takeaway" class="section-takeaway">—</p>
         </div>
-        <button type="button" id="hourly-expand-btn" class="iso-btn sm-btn" aria-expanded="false">Show 24h</button>
+        <div class="scroller-nav">
+          <button type="button" id="hourly-prev" class="iso-btn sm-btn" aria-label="Scroll earlier hours">‹</button>
+          <button type="button" id="hourly-next" class="iso-btn sm-btn" aria-label="Scroll later hours">›</button>
+        </div>
       </div>
-      <ol id="hourly-list" class="hourly-list" aria-label="Hourly forecast"></ol>
+      <ol id="hourly-list" class="hourly-scroller" tabindex="0" aria-label="24-hour forecast"></ol>
     </section>
 
     <section class="iso-slab daily-slab" aria-labelledby="daily-heading">
       <div class="section-header">
-        <h2 id="daily-heading" class="section-title">10-Day Forecast</h2>
-        <p id="daily-takeaway" class="section-takeaway">Temperature range</p>
+        <div class="section-title-group">
+          <h2 id="daily-heading" class="section-title">10-Day Forecast</h2>
+          <p id="daily-takeaway" class="section-takeaway">High / low · precip</p>
+        </div>
+        <div class="scroller-nav">
+          <button type="button" id="daily-prev" class="iso-btn sm-btn" aria-label="Scroll earlier days">‹</button>
+          <button type="button" id="daily-next" class="iso-btn sm-btn" aria-label="Scroll later days">›</button>
+        </div>
       </div>
-      <ol id="daily-list" class="daily-list"></ol>
+      <ol id="daily-list" class="hourly-scroller daily-scroller" tabindex="0" aria-label="10-day forecast"></ol>
     </section>
 
     <section class="iso-slab radar-slab" aria-labelledby="radar-heading">

@@ -7,8 +7,8 @@ import {
   MINI_ICON_SPECS,
   classifyWeather,
   renderHeroDiorama,
+  renderHourlyCurveSegment,
   renderMiniIsoIcon,
-  tempRangeGradient,
 } from './iso-art.js';
 import {
   buildHeroSceneState,
@@ -277,8 +277,11 @@ const els = {
   radarTimeline: document.getElementById('radar-timeline'),
   radarFrameTime: document.getElementById('radar-frame-time'),
   hourlyTakeaway: document.getElementById('hourly-takeaway'),
-  hourlyExpandBtn: document.getElementById('hourly-expand-btn'),
+  hourlyPrev: document.getElementById('hourly-prev'),
+  hourlyNext: document.getElementById('hourly-next'),
   hourlyList: document.getElementById('hourly-list'),
+  dailyPrev: document.getElementById('daily-prev'),
+  dailyNext: document.getElementById('daily-next'),
   dailyList: document.getElementById('daily-list'),
   heroDebugReset: document.getElementById('hero-debug-reset'),
   sceneDebugDialog: document.getElementById('scene-debug-dialog'),
@@ -304,7 +307,6 @@ const appState = {
   forecast: null,
   alerts: [],
   radarManuallyToggled: false,
-  hourlyExpanded: false,
   liveHeroScene: null,
   debugHeroOverride: null,
   debugGalleryBuilt: false,
@@ -489,38 +491,35 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     timezone: forecast.timezone,
   });
 
-  // Next 24 hours (vertical timeline matching 10-day direction)
+  // Next 24 hours (horizontal connected elevation strip)
   els.hourlyTakeaway.textContent = buildHourlyTakeaway(hourly, currentHourIdx);
-  const totalHours = Math.min(24, Math.max(0, hourly.time.length - currentHourIdx));
-  const shownHours = appState.hourlyExpanded ? totalHours : Math.min(12, totalHours);
+  const sliceEnd = Math.min(hourly.time.length, currentHourIdx + 24);
   const sliceTemps = [];
-  for (let i = currentHourIdx; i < currentHourIdx + totalHours; i += 1) {
+  for (let i = currentHourIdx; i < sliceEnd; i += 1) {
     sliceTemps.push(Number(hourly.temperature_2m[i]));
   }
   const minHourT = Math.min(...sliceTemps);
   const maxHourT = Math.max(...sliceTemps);
-  const spanHourT = Math.max(1, maxHourT - minHourT);
+  const spanHourT = maxHourT - minHourT;
+  const yCoords = sliceTemps.map((tempF) => {
+    if (spanHourT < 0.5) return 32.5;
+    const ratio = (tempF - minHourT) / spanHourT;
+    return 43 - ratio * 21;
+  });
 
-  if (els.hourlyExpandBtn) {
-    els.hourlyExpandBtn.hidden = totalHours <= 12;
-    els.hourlyExpandBtn.textContent = appState.hourlyExpanded ? 'Show 12h' : `Show ${totalHours}h`;
-    els.hourlyExpandBtn.setAttribute('aria-expanded', String(appState.hourlyExpanded));
-  }
-
-  const hourRows = [];
-  for (let offset = 0; offset < shownHours; offset += 1) {
-    const i = currentHourIdx + offset;
+  const hourCards = [];
+  for (let i = currentHourIdx; i < sliceEnd; i += 1) {
+    const offset = i - currentHourIdx;
     const tempF = sliceTemps[offset];
     const pop = Math.round(Number(hourly.precipitation_probability[i] ?? 0));
     const { hour } = parsePlainDateTime(hourly.time[i]);
-    const pct = Math.max(8, Math.min(100, ((tempF - minHourT) / spanHourT) * 100));
 
     const li = document.createElement('li');
-    li.className = offset === 0 ? 'hour-row is-now' : 'hour-row';
+    li.className = offset === 0 ? 'hour-card is-now' : 'hour-card';
 
     const timeSpan = document.createElement('span');
     timeSpan.className = 'hour-time';
-    timeSpan.textContent = offset === 0 ? 'Now' : formatHour12(hour);
+    timeSpan.textContent = offset === 0 ? 'Now' : formatHourCompact(hour);
 
     const iconDiv = document.createElement('div');
     iconDiv.className = 'hour-icon';
@@ -530,90 +529,87 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
       tempF,
     });
 
+    const curveWrap = document.createElement('div');
+    curveWrap.className = 'hour-curve-wrap';
+    curveWrap.innerHTML = renderHourlyCurveSegment({
+      tempLabel: formatTemp(tempF, unit),
+      tempF,
+      yPrev: yCoords[Math.max(0, offset - 1)],
+      yCurr: yCoords[offset],
+      yNext: yCoords[Math.min(yCoords.length - 1, offset + 1)],
+      isFirst: offset === 0,
+      isLast: offset === yCoords.length - 1,
+    });
+
     const popSpan = document.createElement('span');
     popSpan.className = pop >= 15 ? 'hour-pop' : 'hour-pop is-dry';
     popSpan.textContent = `${pop}%`;
 
-    const tempSpan = document.createElement('span');
-    tempSpan.className = 'hour-temp';
-    tempSpan.textContent = formatTemp(tempF, unit);
-
-    const track = document.createElement('div');
-    track.className = 'range-track';
-    const fill = document.createElement('div');
-    fill.className = 'range-fill';
-    fill.style.setProperty('--range-start', '0%');
-    fill.style.setProperty('--range-span', `${pct.toFixed(1)}%`);
-    fill.style.setProperty('--range-gradient', tempRangeGradient(minHourT, tempF));
-    track.appendChild(fill);
-
-    li.append(timeSpan, iconDiv, popSpan, tempSpan, track);
-    hourRows.push(li);
+    li.append(timeSpan, iconDiv, curveWrap, popSpan);
+    hourCards.push(li);
   }
-  els.hourlyList.replaceChildren(...hourRows);
+  els.hourlyList.replaceChildren(...hourCards);
 
-  // 10-day forecast (Today + 9 days)
+  // 10-day forecast (horizontal connected elevation strip matching 24h view)
   const dayCount = Math.min(10, daily.time.length);
-  const weekLow = Math.min(...daily.temperature_2m_min.slice(0, dayCount).map(Number));
-  const weekHigh = Math.max(...daily.temperature_2m_max.slice(0, dayCount).map(Number));
-  const weekSpan = Math.max(1, weekHigh - weekLow);
+  const dayHighs = [];
+  for (let i = 0; i < dayCount; i += 1) {
+    dayHighs.push(Number(daily.temperature_2m_max[i]));
+  }
+  const minDayHigh = Math.min(...dayHighs);
+  const maxDayHigh = Math.max(...dayHighs);
+  const spanDayHigh = maxDayHigh - minDayHigh;
+  const dayYCoords = dayHighs.map((tempF) => {
+    if (spanDayHigh < 0.5) return 32.5;
+    const ratio = (tempF - minDayHigh) / spanDayHigh;
+    return 43 - ratio * 21;
+  });
 
-  const dayRows = [];
+  const dayCards = [];
   for (let i = 0; i < dayCount; i += 1) {
     const lowF = Number(daily.temperature_2m_min[i]);
-    const highF = Number(daily.temperature_2m_max[i]);
+    const highF = dayHighs[i];
     const pop = Math.round(Number(daily.precipitation_probability_max[i] ?? 0));
-    const startPct = ((lowF - weekLow) / weekSpan) * 100;
-    const spanPct = ((highF - lowF) / weekSpan) * 100;
 
     const li = document.createElement('li');
-    li.className = i === 0 ? 'daily-row is-today' : 'daily-row';
+    li.className = i === 0 ? 'hour-card is-now' : 'hour-card';
 
     const daySpan = document.createElement('span');
-    daySpan.className = 'daily-day';
+    daySpan.className = 'hour-time';
     daySpan.textContent = i === 0 ? 'Today' : getWeekdayShort(daily.time[i]);
 
     const iconDiv = document.createElement('div');
-    iconDiv.className = 'daily-icon';
+    iconDiv.className = 'hour-icon';
     iconDiv.innerHTML = renderMiniIsoIcon(daily.weather_code[i], 1, {
       precipProb: pop,
       precipInches: Number(daily.precipitation_sum[i] ?? 0),
       tempF: (lowF + highF) / 2,
     });
 
-    const popSpan = document.createElement('span');
-    popSpan.className = pop >= 10 ? 'daily-pop' : 'daily-pop is-dry';
-    popSpan.textContent = `${pop}%`;
+    const curveWrap = document.createElement('div');
+    curveWrap.className = 'hour-curve-wrap';
+    curveWrap.innerHTML = renderHourlyCurveSegment({
+      tempLabel: formatTemp(highF, unit),
+      tempF: highF,
+      yPrev: dayYCoords[Math.max(0, i - 1)],
+      yCurr: dayYCoords[i],
+      yNext: dayYCoords[Math.min(dayYCoords.length - 1, i + 1)],
+      isFirst: i === 0,
+      isLast: i === dayYCoords.length - 1,
+    });
 
     const lowSpan = document.createElement('span');
-    lowSpan.className = 'daily-low';
+    lowSpan.className = 'day-low-label';
     lowSpan.textContent = formatTemp(lowF, unit);
 
-    const track = document.createElement('div');
-    track.className = 'range-track';
-    const fill = document.createElement('div');
-    fill.className = 'range-fill';
-    fill.style.setProperty('--range-start', `${startPct.toFixed(1)}%`);
-    fill.style.setProperty('--range-span', `${spanPct.toFixed(1)}%`);
-    fill.style.setProperty('--range-gradient', tempRangeGradient(lowF, highF));
-    track.appendChild(fill);
+    const popSpan = document.createElement('span');
+    popSpan.className = pop >= 10 ? 'hour-pop' : 'hour-pop is-dry';
+    popSpan.textContent = `${pop}%`;
 
-    if (i === 0) {
-      const nowPos = Math.max(0, Math.min(100, ((Number(current.temperature_2m) - weekLow) / weekSpan) * 100));
-      const dot = document.createElement('span');
-      dot.className = 'range-now-dot';
-      dot.style.setProperty('--now-pos', `${nowPos.toFixed(1)}%`);
-      track.appendChild(dot);
-    }
-
-    const highSpan = document.createElement('span');
-    highSpan.className = 'daily-high';
-    highSpan.textContent = formatTemp(highF, unit);
-
-    li.append(daySpan, iconDiv, popSpan, lowSpan, track, highSpan);
-    dayRows.push(li);
+    li.append(daySpan, iconDiv, curveWrap, lowSpan, popSpan);
+    dayCards.push(li);
   }
-  els.dailyList.replaceChildren(...dayRows);
+  els.dailyList.replaceChildren(...dayCards);
 }
 
 // ============================================================================
@@ -1429,9 +1425,20 @@ els.radarSummary.addEventListener('click', () => {
 
 els.radarDisclosure.addEventListener('toggle', syncRadarToggleCta);
 
-els.hourlyExpandBtn?.addEventListener('click', () => {
-  appState.hourlyExpanded = !appState.hourlyExpanded;
-  renderAll({ freshnessLabel: 'Updated just now' });
+els.hourlyPrev?.addEventListener('click', () => {
+  els.hourlyList.scrollBy({ left: -320, behavior: 'smooth' });
+});
+
+els.hourlyNext?.addEventListener('click', () => {
+  els.hourlyList.scrollBy({ left: 320, behavior: 'smooth' });
+});
+
+els.dailyPrev?.addEventListener('click', () => {
+  els.dailyList.scrollBy({ left: -320, behavior: 'smooth' });
+});
+
+els.dailyNext?.addEventListener('click', () => {
+  els.dailyList.scrollBy({ left: 320, behavior: 'smooth' });
 });
 
 // ============================================================================

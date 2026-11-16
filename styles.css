@@ -1124,64 +1124,130 @@ details[open] > summary::before {
   color: var(--ink-secondary);
 }
 
+.scroller-nav {
+  display: none;
+}
+
+@media (min-width: 700px) and (hover: hover) and (pointer: fine) {
+  .scroller-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+  }
+}
+
 /* ==========================================================================
-   Next 24 Hours — Vertical Timeline Matching 10-Day Direction
+   Next 24 Hours & 10-Day Forecast — Connected Horizontal Elevation Strips
    ========================================================================== */
 
-.hourly-list {
+.hourly-slab,
+.daily-slab {
+  padding: 0.9rem 0.75rem;
+}
+
+.hourly-scroller {
   margin: 0;
   padding: 0;
   list-style: none;
-  display: grid;
-  gap: 0.42rem;
-}
-
-.hour-row {
-  display: grid;
-  grid-template-columns: 3.2rem 2rem 2.4rem 2.4rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.42rem 0.55rem;
-  border-radius: 12px;
-  background: var(--slab-bg-alt);
-  border: 1px solid var(--slab-border);
-  box-shadow: 0 2px 0 var(--slab-lip);
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0;
+  width: 100%;
   min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  border: 1.5px solid var(--slab-border);
+  border-radius: 13px;
+  background: var(--slab-bg-alt);
+  box-shadow: inset 0 2px 0 rgb(0 0 0 / 0.04);
 }
 
-.hour-row.is-now {
-  border-color: var(--accent);
+.hour-card {
+  flex: 0 0 calc(100% / 6.15);
+  width: calc(100% / 6.15);
+  min-width: 48px;
+  scroll-snap-align: start;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--slab-border);
+  border-radius: 0;
+  padding: 0.45rem 0 0.42rem;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.hour-card:last-child {
+  border-right: 0;
+}
+
+.hour-card.is-now {
+  background: var(--accent-soft);
 }
 
 .hour-time {
-  font-size: 0.84rem;
+  font-size: 0.69rem;
   font-weight: 700;
-  color: var(--ink-primary);
+  color: var(--ink-secondary);
   white-space: nowrap;
 }
 
-.hour-row.is-now .hour-time {
+.hour-card.is-now .hour-time {
   color: var(--accent-ink);
 }
 
 .hour-icon {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
 }
 
 .hour-icon svg {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   display: block;
 }
 
+.hour-curve-wrap {
+  display: grid;
+  width: 100%;
+  height: 56px;
+}
+
+.hour-curve-bg,
+.hour-curve-fg {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hour-curve-temp {
+  fill: var(--ink-primary);
+  font-size: 11.5px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+}
+
+.day-low-label {
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
 .hour-pop {
-  font-size: 0.74rem;
+  font-size: 0.68rem;
   font-weight: 700;
   color: var(--rain);
-  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1191,15 +1257,8 @@ details[open] > summary::before {
   opacity: 0.7;
 }
 
-.hour-temp {
-  font-size: 0.86rem;
-  font-weight: 720;
-  font-variant-numeric: tabular-nums;
-  text-align: end;
-}
-
 /* ==========================================================================
-   10-Day Forecast — Mobile-First Grid + 3D Isometric Range Bars
+   10-Day Forecast — Mobile-First Grid + 3D Isometric Range Bars (unused fallback)
    ========================================================================== */
 
 .daily-list {
@@ -1862,33 +1921,32 @@ dialog::backdrop {
     height: 350px;
   }
 
-  .hour-row {
-    grid-template-columns: 4.2rem 2.5rem 2.9rem 2.8rem minmax(0, 1fr);
-    gap: 0.6rem;
-    padding: 0.45rem 0.7rem;
-  }
-
-  .daily-row {
-    grid-template-columns: 4.5rem 2.5rem 2.9rem 2.6rem minmax(0, 1fr) 2.6rem;
-    gap: 0.6rem;
-    padding: 0.48rem 0.7rem;
-  }
-
-  .daily-day,
-  .hour-time {
-    font-size: 0.9rem;
-  }
-
-  .daily-icon,
-  .hour-icon {
-    width: 34px;
-    height: 34px;
-  }
-
-  .daily-icon svg,
+  .hour-icon,
   .hour-icon svg {
-    width: 34px;
-    height: 34px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .hour-curve-wrap {
+    height: 62px;
+  }
+
+  .hour-time {
+    font-size: 0.74rem;
+  }
+}
+
+@media (min-width: 700px) {
+  .hour-card {
+    flex: 0 0 calc(100% / 10.25);
+    width: calc(100% / 10.25);
+    min-width: 62px;
+    padding: 0.55rem 0 0.5rem;
+  }
+
+  .daily-scroller .hour-card {
+    flex: 0 0 10%;
+    width: 10%;
   }
 }
 

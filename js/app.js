@@ -1590,8 +1590,8 @@ if (els.sceneDebugDialog && !('closedBy' in HTMLDialogElement.prototype)) {
 // Boot
 // ============================================================================
 
-(async () => {
-  await ensureTemporal();
+(() => {
+  void ensureTemporal();
   loadWeatherForLocation(appState.location);
   if (new URLSearchParams(window.location.search).get('debug') === '1') {
     openSceneDebugDialog();

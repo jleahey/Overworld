@@ -95,11 +95,19 @@ export async function fetchForecast(lat, lon) {
     forecast_days: '8',
   });
 
-  const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`, {
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!res.ok) {
-    throw new Error(`Forecast request failed (${res.status})`);
+  const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
+  let res;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (res.ok || (res.status < 500 && res.status !== 429)) break;
+    } catch (err) {
+      if (attempt === 1) throw err;
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  if (!res || !res.ok) {
+    throw new Error(`Forecast request failed (${res?.status ?? 'network'})`);
   }
   const data = await res.json();
 

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="A clean, zero-clutter isometric weather page with current conditions, 24-hour outlook, 7-day forecast, and cartoon pixel-art conditional radar.">
+  <title>Overworld</title>
+  <link rel="icon" type="image/svg+xml" href="./icons/icon.svg">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="top-bar">
+    <div class="top-bar-inner">
+      <a class="brand" href="./" aria-label="Overworld home">
+        <svg class="brand-icon" viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
+          <!-- Radiant 3D golden sun cube (upper-right) -->
+          <g stroke="#92400e" stroke-width="1.3" stroke-linejoin="round">
+            <polygon points="46,6 57,11.5 46,17 35,11.5" fill="#fef08a"/>
+            <polygon points="35,11.5 46,17 46,28.5 35,23" fill="#facc15"/>
+            <polygon points="46,17 57,11.5 57,23 46,28.5" fill="#eab308"/>
+          </g>
+          <!-- Floating 2:1 isometric sky-island -->
+          <g stroke="#1e293b" stroke-width="1.4" stroke-linejoin="round">
+            <polygon points="8,42 32,54 32,59 8,47" fill="#64748b"/>
+            <polygon points="32,54 56,42 56,47 32,59" fill="#475569"/>
+            <polygon points="8,38 32,50 32,54 8,42" fill="#b4693e"/>
+            <polygon points="32,50 56,38 56,42 32,54" fill="#7c4324"/>
+            <polygon points="32,22 56,34 32,46 8,34" fill="#4ade80"/>
+            <polygon points="8,34 32,46 32,50 8,38" fill="#22c55e"/>
+            <polygon points="32,46 56,34 56,38 32,50" fill="#15803d"/>
+          </g>
+          <!-- Pond inlay -->
+          <polygon points="34,33 48,40 37,45.5 23,38.5" fill="#38bdf8" stroke="#0369a1" stroke-width="1" stroke-linejoin="round"/>
+          <!-- Plump 3D isometric white voxel cloud (upper-left) -->
+          <g stroke="#334155" stroke-width="1.4" stroke-linejoin="round">
+            <polygon points="26,13 42,21 28,28 12,20" fill="#ffffff"/>
+            <polygon points="12,20 28,28 28,34 12,26" fill="#dbeafe"/>
+            <polygon points="28,28 42,21 42,27 28,34" fill="#93c5fd"/>
+            <polygon points="26,8 36,13 27,17.5 17,12.5" fill="#ffffff"/>
+            <polygon points="17,12.5 27,17.5 27,22 17,17" fill="#e0f2fe"/>
+            <polygon points="27,17.5 36,13 36,17.5 27,22" fill="#bae6fd"/>
+          </g>
+        </svg>
+        <span class="brand-name">Overworld</span>
+      </a>
+
+      <search class="location-search">
+        <form id="search-form" autocomplete="off">
+          <label for="city-input" class="visually-hidden">Search city or ZIP code</label>
+          <input
+            type="search"
+            id="city-input"
+            name="q"
+            placeholder="Search city or ZIP…"
+            enterkeyhint="search"
+            aria-controls="search-results"
+            aria-expanded="false"
+          >
+        </form>
+        <ul id="search-results" class="search-dropdown" role="list" hidden></ul>
+        <p id="reorder-status" role="status" class="visually-hidden"></p>
+      </search>
+
+      <div class="top-actions">
+        <button type="button" id="locate-btn" class="iso-btn icon-btn" aria-label="Use my current location">
+          <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+            <circle cx="10" cy="10" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M10 2v3M10 15v3M2 10h3M15 10h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <span class="btn-label">Locate</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div id="swipe-peek" class="swipe-peek" aria-hidden="true" hidden></div>
+
+  <main id="app-main" class="board">
+    <nav id="location-pager" class="location-pager" aria-label="Saved locations" hidden>
+      <button type="button" id="loc-prev-btn" class="pager-step-btn" aria-label="Previous location"></button>
+      <div id="loc-dots" class="pager-dots"></div>
+      <button type="button" id="loc-next-btn" class="pager-step-btn" aria-label="Next location"></button>
+    </nav>
+
+    <section id="alerts-slot" class="alerts-slot" hidden aria-label="Active weather alerts"></section>
+
+    <section class="iso-slab hero-slab" aria-labelledby="city-heading">
+      <div class="hero-readout">
+        <p id="location-kicker" class="location-kicker">Loading forecast…</p>
+        <h1 id="city-heading" class="city-heading" tabindex="-1">—</h1>
+        <div class="current-primary">
+          <span id="current-temp" class="current-temp">--°</span>
+          <span id="current-summary" class="current-summary">—</span>
+        </div>
+        <dl id="current-stats" class="stats-grid" aria-label="Current weather metrics">
+          <div class="stat-tile">
+            <dt>Feels Like</dt>
+            <dd id="stat-feels">--°</dd>
+          </div>
+          <div class="stat-tile">
+            <dt>High / Low</dt>
+            <dd id="stat-hilow">--° / --°</dd>
+          </div>
+          <div class="stat-tile">
+            <dt>Wind</dt>
+            <dd id="stat-wind">--</dd>
+          </div>
+          <div class="stat-tile">
+            <dt id="stat-precip-label">Next Hour</dt>
+            <dd id="stat-precip">--</dd>
+          </div>
+        </dl>
+      </div>
+      <div class="hero-diorama-wrap">
+        <div id="hero-diorama" class="hero-diorama" role="img" aria-label="Isometric illustration of current weather"></div>
+        <button type="button" id="hero-debug-reset" class="hero-debug-pill" hidden>Previewing debug scene · Reset to live</button>
+      </div>
+    </section>
+
+    <section class="iso-slab hourly-slab" aria-labelledby="hourly-heading">
+      <div class="section-header">
+        <div class="section-title-group">
+          <h2 id="hourly-heading" class="section-title">Next 24 Hours</h2>
+          <p id="hourly-takeaway" class="section-takeaway">—</p>
+        </div>
+        <div class="scroller-nav">
+          <button type="button" id="hourly-prev" class="iso-btn sm-btn" aria-label="Scroll earlier hours">‹</button>
+          <button type="button" id="hourly-next" class="iso-btn sm-btn" aria-label="Scroll later hours">›</button>
+        </div>
+      </div>
+      <ol id="hourly-list" class="hourly-scroller" tabindex="0" aria-label="24-hour forecast"></ol>
+    </section>
+
+    <section class="iso-slab daily-slab" aria-labelledby="daily-heading">
+      <div class="section-header">
+        <h2 id="daily-heading" class="section-title">7-Day Forecast</h2>
+        <p id="daily-takeaway" class="section-takeaway">Temperature range</p>
+      </div>
+      <ol id="daily-list" class="daily-list"></ol>
+    </section>
+
+    <section class="iso-slab radar-slab" aria-labelledby="radar-heading">
+      <h2 id="radar-heading" class="visually-hidden">Weather Radar</h2>
+      <details id="radar-disclosure" class="radar-details">
+        <summary id="radar-summary" class="radar-summary">
+          <span class="radar-summary-label">
+            <span id="radar-title-text" class="radar-title">Live Radar</span>
+            <span id="radar-reason-badge" class="radar-badge" data-interesting="false">Checking skies…</span>
+          </span>
+          <span class="radar-summary-meta">
+            <span id="radar-provider-tag" class="provider-tag">—</span>
+            <span id="radar-toggle-cta" class="radar-cta">Show Map</span>
+          </span>
+        </summary>
+        <div class="radar-content">
+          <div id="radar-map" class="radar-map" aria-label="Interactive cartoon weather radar map"></div>
+          <div class="radar-controls">
+            <button type="button" id="radar-play-btn" class="iso-btn sm-btn">Pause</button>
+            <label for="radar-timeline" class="visually-hidden">Radar time frame</label>
+            <input type="range" id="radar-timeline" class="radar-timeline" min="0" max="6" value="6" step="1">
+            <span id="radar-frame-time" class="radar-time">Now</span>
+          </div>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-bar">
+      <button type="button" id="unit-toggle" class="unit-toggle-mini" aria-label="°F / °C — switch to Celsius">
+        <span class="unit-pill is-active" data-unit="F">°F</span>
+        <span class="unit-pill" data-unit="C">°C</span>
+      </button>
+      <p class="footer-sources">Sources: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> / <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OSM</a> · <a href="https://mesonet.agron.iastate.edu/" target="_blank" rel="noopener">NOAA Mesonet</a> · <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · <a href="https://www.weather.gov/" target="_blank" rel="noopener">NWS</a></p>
+    </div>
+  </footer>
+
+  <dialog id="scene-debug-dialog" class="iso-dialog" closedby="any" aria-labelledby="scene-debug-title">
+    <div class="dialog-header">
+      <div>
+        <h2 id="scene-debug-title" class="dialog-title">Isometric Weather Art Debug</h2>
+        <p class="dialog-subtitle">Inspect all 16 dynamic sky-island stories, mix custom conditions, or preview on the main card.</p>
+      </div>
+      <form method="dialog">
+        <button type="submit" class="iso-btn sm-btn" autofocus>Close</button>
+      </form>
+    </div>
+
+    <div class="dialog-body">
+      <section class="debug-mixer" aria-labelledby="mixer-heading">
+        <div class="debug-mixer-preview-col">
+          <div id="mixer-preview" class="mixer-preview" role="img" aria-label="Custom debug sky-island scene preview"></div>
+          <p id="mixer-story" class="mixer-story">—</p>
+        </div>
+
+        <div class="debug-mixer-controls">
+          <h3 id="mixer-heading" class="debug-section-title">Custom Scene Mixer</h3>
+          <div class="mixer-fields">
+            <label class="mixer-field">
+              <span>Time of Day</span>
+              <select id="mixer-time" class="iso-select">
+                <option value="dawn">Dawn</option>
+                <option value="day" selected>Day</option>
+                <option value="dusk">Dusk</option>
+                <option value="night">Night</option>
+              </select>
+            </label>
+
+            <label class="mixer-field">
+              <span>Current Sky</span>
+              <select id="mixer-sky" class="iso-select">
+                <option value="clear">Clear</option>
+                <option value="mostly-clear" selected>Mostly Clear</option>
+                <option value="partly">Partly Cloudy</option>
+                <option value="overcast">Overcast</option>
+                <option value="fog">Foggy</option>
+                <option value="drizzle">Drizzle</option>
+                <option value="rain">Rain</option>
+                <option value="heavy-rain">Heavy Rain</option>
+                <option value="snow">Snow</option>
+                <option value="heavy-snow">Heavy Snow</option>
+                <option value="storm">Thunderstorm</option>
+              </select>
+            </label>
+
+            <label class="mixer-field">
+              <span>Horizon Transition</span>
+              <select id="mixer-transition" class="iso-select">
+                <option value="none">Steady (None)</option>
+                <option value="rain-soon" selected>Rain Starting Soon</option>
+                <option value="storm-soon">Storm Rolling In</option>
+                <option value="snow-soon">Snow Approaching</option>
+                <option value="cloudy-soon">Clouds Moving In</option>
+                <option value="clearing">Clearing · Rainbow</option>
+              </select>
+            </label>
+
+            <label class="mixer-field">
+              <span>Transition ETA</span>
+              <select id="mixer-eta" class="iso-select">
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+                <option value="45">45 min</option>
+                <option value="75" selected>75 min</option>
+                <option value="90">90 min</option>
+                <option value="120">2 hours</option>
+              </select>
+            </label>
+
+            <label class="mixer-field">
+              <span>Temp (<strong id="mixer-temp-val">64°F</strong>)</span>
+              <input type="range" id="mixer-temp" min="0" max="105" step="1" value="64">
+            </label>
+
+            <label class="mixer-field">
+              <span>Wind (<strong id="mixer-wind-val">14 mph</strong>)</span>
+              <input type="range" id="mixer-wind" min="0" max="36" step="1" value="14">
+            </label>
+          </div>
+
+          <div class="mixer-actions">
+            <button type="button" id="mixer-apply-btn" class="iso-btn sm-btn primary-btn">Apply to Main Card</button>
+            <button type="button" id="mixer-reset-btn" class="iso-btn sm-btn">Reset to Live Weather</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="debug-gallery-section" aria-labelledby="gallery-heading">
+        <h3 id="gallery-heading" class="debug-section-title">All 16 Hero Sky-Island Scenes</h3>
+        <div id="debug-preset-grid" class="debug-preset-grid"></div>
+      </section>
+
+      <section class="debug-icons-section" aria-labelledby="icons-heading">
+        <h3 id="icons-heading" class="debug-section-title">All 12 Hourly &amp; Daily Voxel Icons</h3>
+        <div id="debug-icon-grid" class="debug-icon-grid"></div>
+      </section>
+    </div>
+  </dialog>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" defer></script>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

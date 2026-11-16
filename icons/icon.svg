@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="skyBg" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#1e3a8a"/>
+      <stop offset="55%" stop-color="#0369a1"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <radialGradient id="sunGlow" cx="0.74" cy="0.26" r="0.36">
+      <stop offset="0%" stop-color="#fde047" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#fde047" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded app-icon sky tile -->
+  <rect width="128" height="128" rx="28" fill="url(#skyBg)"/>
+  <rect width="128" height="128" rx="28" fill="url(#sunGlow)"/>
+
+  <!-- Soft island drop shadow -->
+  <polygon points="64,95 110,106 64,119 18,106" fill="#020617" opacity="0.35"/>
+
+  <!-- Floating 2:1 isometric sky-island base (cx=64, cy=80, ux=19, uy=9.5, uz=19, x,y in [-1.2, 1.2]) -->
+  <!-- Bedrock strata -->
+  <polygon points="18.4,83.8 64,106.6 64,115.2 18.4,92.4" fill="#64748b"/>
+  <polygon points="64,106.6 109.6,83.8 109.6,92.4 64,115.2" fill="#334155"/>
+  <!-- Terracotta soil strata -->
+  <polygon points="18.4,77.2 64,100 64,106.6 18.4,83.8" fill="#b4693e"/>
+  <polygon points="64,100 109.6,77.2 109.6,83.8 64,106.6" fill="#7c4324"/>
+  <!-- Lush emerald turf -->
+  <polygon points="64,46.6 109.6,69.4 64,92.2 18.4,69.4" fill="#4ade80"/>
+  <polygon points="18.4,69.4 64,92.2 64,100 18.4,77.2" fill="#22c55e"/>
+  <polygon points="64,92.2 109.6,69.4 109.6,77.2 64,100" fill="#15803d"/>
+
+  <!-- Sparkling sky-blue pond inlay + specular glint (front-right terrace) -->
+  <polygon points="67,67.5 94,81 74,91 47,77.5" fill="#0284c7"/>
+  <polygon points="67,69.2 91.5,81.4 74,90.2 49.5,78" fill="#38bdf8"/>
+  <polygon points="69,73.5 78,78 73,80.5 64,76" fill="#e0f2fe" opacity="0.85"/>
+
+  <!-- Mini 2-tier isometric pine tree on left meadow -->
+  <polygon points="41,53 31,69 41,74" fill="#22c55e"/>
+  <polygon points="41,53 51,69 41,74" fill="#15803d"/>
+  <polygon points="41,45 33,59 41,63" fill="#86efac"/>
+  <polygon points="41,45 49,59 41,63" fill="#22c55e"/>
+
+  <!-- Radiant faceted 3D golden sun cube (upper-right) -->
+  <polygon points="90,15 108,24 90,33 72,24" fill="#fef08a"/>
+  <polygon points="72,24 90,33 90,52 72,43" fill="#facc15"/>
+  <polygon points="90,33 108,24 108,43 90,52" fill="#eab308"/>
+
+  <!-- Crisp cyan rain streaks beneath cloud -->
+  <line x1="52" y1="53" x2="47" y2="63" stroke="#38bdf8" stroke-width="3.6" stroke-linecap="round"/>
+  <line x1="65" y1="55" x2="60" y2="65" stroke="#38bdf8" stroke-width="3.6" stroke-linecap="round"/>
+
+  <!-- Plump two-tier 3D isometric white voxel cloud (upper-left/center) -->
+  <!-- Cloud lower deck -->
+  <polygon points="55,28 83,42 59,54 31,40" fill="#ffffff"/>
+  <polygon points="31,40 59,54 59,64 31,50" fill="#dbeafe"/>
+  <polygon points="59,54 83,42 83,52 59,64" fill="#93c5fd"/>
+  <!-- Cloud upper crown -->
+  <polygon points="55,20 73,29 57,37 39,28" fill="#ffffff"/>
+  <polygon points="39,28 57,37 57,45 39,36" fill="#e0f2fe"/>
+  <polygon points="57,37 73,29 73,37 57,45" fill="#bae6fd"/>
+</svg>

@@ -1,0 +1,17 @@
+{
+  "name": "Overworld",
+  "short_name": "Overworld",
+  "description": "Zero-clutter isometric weather forecast and smart conditional radar.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#efeae0",
+  "theme_color": "#1c2430",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

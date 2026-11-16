@@ -889,7 +889,7 @@ export function renderHeroDiorama(input = {}) {
     windLayer = `<g class="iso-wind-streak">${strokes}</g>`;
   }
 
-  return `<svg viewBox="0 0 380 290" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  return `<svg viewBox="46 22 292 246" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     ${skyAura}
     <g class="iso-island-group">
       ${shadow}

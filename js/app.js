@@ -7,7 +7,6 @@ import {
   MINI_ICON_SPECS,
   classifyWeather,
   renderHeroDiorama,
-  renderHourlyCurveSegment,
   renderMiniIsoIcon,
   tempRangeGradient,
 } from './iso-art.js';
@@ -161,7 +160,8 @@ function loadInitialLocation() {
   }
 
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return TIMEZONE_DEFAULTS[tz] || TIMEZONE_DEFAULTS['America/Los_Angeles'];
+  const fallback = TIMEZONE_DEFAULTS[tz] || TIMEZONE_DEFAULTS['America/Los_Angeles'];
+  return { ...fallback, isDefaultFallback: true };
 }
 
 function isSameLocation(a, b) {
@@ -178,25 +178,39 @@ function saveRecentLocations(list) {
 }
 
 function syncLocationUrlAndStorage(loc) {
+  if (loc.isDefaultFallback) {
+    renderLocationPager();
+    return;
+  }
+
+  const cleanLoc = {
+    name: loc.name,
+    admin1: loc.admin1 || '',
+    country: loc.country || '',
+    countryCode: loc.countryCode || '',
+    lat: loc.lat,
+    lon: loc.lon,
+  };
+
   const url = new URL(window.location.href);
-  url.searchParams.set('lat', Number(loc.lat).toFixed(4));
-  url.searchParams.set('lon', Number(loc.lon).toFixed(4));
-  url.searchParams.set('name', loc.name);
-  if (loc.admin1) url.searchParams.set('admin1', loc.admin1);
+  url.searchParams.set('lat', Number(cleanLoc.lat).toFixed(4));
+  url.searchParams.set('lon', Number(cleanLoc.lon).toFixed(4));
+  url.searchParams.set('name', cleanLoc.name);
+  if (cleanLoc.admin1) url.searchParams.set('admin1', cleanLoc.admin1);
   else url.searchParams.delete('admin1');
-  if (loc.countryCode) url.searchParams.set('cc', loc.countryCode);
+  if (cleanLoc.countryCode) url.searchParams.set('cc', cleanLoc.countryCode);
   else url.searchParams.delete('cc');
   history.replaceState(null, '', url.toString());
 
   try {
-    localStorage.setItem(STORAGE_LAST_LOC, JSON.stringify(loc));
+    localStorage.setItem(STORAGE_LAST_LOC, JSON.stringify(cleanLoc));
     const recent = loadRecentLocations();
-    const existingIdx = recent.findIndex((item) => isSameLocation(item, loc));
+    const existingIdx = recent.findIndex((item) => isSameLocation(item, cleanLoc));
     if (existingIdx !== -1) {
       // Preserve user-defined order while keeping coordinates/admin metadata fresh
-      recent[existingIdx] = { ...recent[existingIdx], ...loc };
+      recent[existingIdx] = { ...recent[existingIdx], ...cleanLoc };
     } else {
-      recent.unshift(loc);
+      recent.unshift(cleanLoc);
     }
     saveRecentLocations(recent.slice(0, 8));
   } catch {
@@ -250,6 +264,8 @@ const els = {
   statWind: document.getElementById('stat-wind'),
   statPrecipLabel: document.getElementById('stat-precip-label'),
   statPrecip: document.getElementById('stat-precip'),
+  statHumidity: document.getElementById('stat-humidity'),
+  statUv: document.getElementById('stat-uv'),
   heroDiorama: document.getElementById('hero-diorama'),
   radarDisclosure: document.getElementById('radar-disclosure'),
   radarSummary: document.getElementById('radar-summary'),
@@ -261,8 +277,7 @@ const els = {
   radarTimeline: document.getElementById('radar-timeline'),
   radarFrameTime: document.getElementById('radar-frame-time'),
   hourlyTakeaway: document.getElementById('hourly-takeaway'),
-  hourlyPrev: document.getElementById('hourly-prev'),
-  hourlyNext: document.getElementById('hourly-next'),
+  hourlyExpandBtn: document.getElementById('hourly-expand-btn'),
   hourlyList: document.getElementById('hourly-list'),
   dailyList: document.getElementById('daily-list'),
   heroDebugReset: document.getElementById('hero-debug-reset'),
@@ -289,6 +304,7 @@ const appState = {
   forecast: null,
   alerts: [],
   radarManuallyToggled: false,
+  hourlyExpanded: false,
   liveHeroScene: null,
   debugHeroOverride: null,
   debugGalleryBuilt: false,
@@ -428,11 +444,23 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
   els.currentSummary.textContent = scene.label;
   els.statFeels.textContent = formatTemp(current.apparent_temperature, unit);
   els.statHiLow.textContent = `${formatTemp(daily.temperature_2m_max[0], unit)} / ${formatTemp(daily.temperature_2m_min[0], unit)}`;
-  els.statWind.textContent = formatSpeed(current.wind_speed_10m, unit);
+  const windVal = Number(current.wind_speed_10m ?? 0);
+  const gustVal = Number(current.wind_gusts_10m ?? 0);
+  els.statWind.textContent =
+    gustVal >= windVal + 6
+      ? `${formatSpeed(windVal, unit)} · G${unit === 'C' ? Math.round(gustVal * 1.60934) : Math.round(gustVal)}`
+      : formatSpeed(windVal, unit);
 
   const precipInfo = describeImmediatePrecip(forecast, currentHourIdx, unit);
   els.statPrecipLabel.textContent = precipInfo.label;
   els.statPrecip.textContent = precipInfo.value;
+
+  const humidity = current.relative_humidity_2m;
+  els.statHumidity.textContent = Number.isFinite(Number(humidity)) ? `${Math.round(Number(humidity))}%` : '--%';
+
+  const uvVal = Number(current.uv_index ?? 0);
+  const uvLabel = uvVal >= 11 ? 'Extr' : uvVal >= 8 ? 'V.High' : uvVal >= 6 ? 'High' : uvVal >= 3 ? 'Mod' : 'Low';
+  els.statUv.textContent = Number.isFinite(Number(current.uv_index)) ? `${Math.round(uvVal)} · ${uvLabel}` : '--';
 
   // Dynamic multi-signal hero isometric diorama
   const liveHeroScene = buildHeroSceneState(forecast, currentHourIdx);
@@ -461,35 +489,38 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     timezone: forecast.timezone,
   });
 
-  // Next 24 hours
+  // Next 24 hours (vertical timeline matching 10-day direction)
   els.hourlyTakeaway.textContent = buildHourlyTakeaway(hourly, currentHourIdx);
-  const sliceEnd = Math.min(hourly.time.length, currentHourIdx + 24);
+  const totalHours = Math.min(24, Math.max(0, hourly.time.length - currentHourIdx));
+  const shownHours = appState.hourlyExpanded ? totalHours : Math.min(12, totalHours);
   const sliceTemps = [];
-  for (let i = currentHourIdx; i < sliceEnd; i += 1) {
+  for (let i = currentHourIdx; i < currentHourIdx + totalHours; i += 1) {
     sliceTemps.push(Number(hourly.temperature_2m[i]));
   }
   const minHourT = Math.min(...sliceTemps);
   const maxHourT = Math.max(...sliceTemps);
-  const spanHourT = maxHourT - minHourT;
-  const yCoords = sliceTemps.map((tempF) => {
-    if (spanHourT < 0.5) return 32.5;
-    const ratio = (tempF - minHourT) / spanHourT;
-    return 43 - ratio * 21;
-  });
+  const spanHourT = Math.max(1, maxHourT - minHourT);
 
-  const hourCards = [];
-  for (let i = currentHourIdx; i < sliceEnd; i += 1) {
-    const offset = i - currentHourIdx;
+  if (els.hourlyExpandBtn) {
+    els.hourlyExpandBtn.hidden = totalHours <= 12;
+    els.hourlyExpandBtn.textContent = appState.hourlyExpanded ? 'Show 12h' : `Show ${totalHours}h`;
+    els.hourlyExpandBtn.setAttribute('aria-expanded', String(appState.hourlyExpanded));
+  }
+
+  const hourRows = [];
+  for (let offset = 0; offset < shownHours; offset += 1) {
+    const i = currentHourIdx + offset;
     const tempF = sliceTemps[offset];
     const pop = Math.round(Number(hourly.precipitation_probability[i] ?? 0));
     const { hour } = parsePlainDateTime(hourly.time[i]);
+    const pct = Math.max(8, Math.min(100, ((tempF - minHourT) / spanHourT) * 100));
 
     const li = document.createElement('li');
-    li.className = offset === 0 ? 'hour-card is-now' : 'hour-card';
+    li.className = offset === 0 ? 'hour-row is-now' : 'hour-row';
 
     const timeSpan = document.createElement('span');
     timeSpan.className = 'hour-time';
-    timeSpan.textContent = offset === 0 ? 'Now' : formatHourCompact(hour);
+    timeSpan.textContent = offset === 0 ? 'Now' : formatHour12(hour);
 
     const iconDiv = document.createElement('div');
     iconDiv.className = 'hour-icon';
@@ -499,29 +530,30 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
       tempF,
     });
 
-    const curveWrap = document.createElement('div');
-    curveWrap.className = 'hour-curve-wrap';
-    curveWrap.innerHTML = renderHourlyCurveSegment({
-      tempLabel: formatTemp(tempF, unit),
-      tempF,
-      yPrev: yCoords[Math.max(0, offset - 1)],
-      yCurr: yCoords[offset],
-      yNext: yCoords[Math.min(yCoords.length - 1, offset + 1)],
-      isFirst: offset === 0,
-      isLast: offset === yCoords.length - 1,
-    });
-
     const popSpan = document.createElement('span');
     popSpan.className = pop >= 15 ? 'hour-pop' : 'hour-pop is-dry';
     popSpan.textContent = `${pop}%`;
 
-    li.append(timeSpan, iconDiv, curveWrap, popSpan);
-    hourCards.push(li);
-  }
-  els.hourlyList.replaceChildren(...hourCards);
+    const tempSpan = document.createElement('span');
+    tempSpan.className = 'hour-temp';
+    tempSpan.textContent = formatTemp(tempF, unit);
 
-  // 7-day forecast (Today + 6 days)
-  const dayCount = Math.min(7, daily.time.length);
+    const track = document.createElement('div');
+    track.className = 'range-track';
+    const fill = document.createElement('div');
+    fill.className = 'range-fill';
+    fill.style.setProperty('--range-start', '0%');
+    fill.style.setProperty('--range-span', `${pct.toFixed(1)}%`);
+    fill.style.setProperty('--range-gradient', tempRangeGradient(minHourT, tempF));
+    track.appendChild(fill);
+
+    li.append(timeSpan, iconDiv, popSpan, tempSpan, track);
+    hourRows.push(li);
+  }
+  els.hourlyList.replaceChildren(...hourRows);
+
+  // 10-day forecast (Today + 9 days)
+  const dayCount = Math.min(10, daily.time.length);
   const weekLow = Math.min(...daily.temperature_2m_min.slice(0, dayCount).map(Number));
   const weekHigh = Math.max(...daily.temperature_2m_max.slice(0, dayCount).map(Number));
   const weekSpan = Math.max(1, weekHigh - weekLow);
@@ -1397,12 +1429,9 @@ els.radarSummary.addEventListener('click', () => {
 
 els.radarDisclosure.addEventListener('toggle', syncRadarToggleCta);
 
-els.hourlyPrev.addEventListener('click', () => {
-  els.hourlyList.scrollBy({ left: -320, behavior: 'smooth' });
-});
-
-els.hourlyNext.addEventListener('click', () => {
-  els.hourlyList.scrollBy({ left: 320, behavior: 'smooth' });
+els.hourlyExpandBtn?.addEventListener('click', () => {
+  appState.hourlyExpanded = !appState.hourlyExpanded;
+  renderAll({ freshnessLabel: 'Updated just now' });
 });
 
 // ============================================================================

@@ -112,6 +112,14 @@
             <dt id="stat-precip-label">Next Hour</dt>
             <dd id="stat-precip">--</dd>
           </div>
+          <div class="stat-tile">
+            <dt>Humidity</dt>
+            <dd id="stat-humidity">--%</dd>
+          </div>
+          <div class="stat-tile">
+            <dt>UV Index</dt>
+            <dd id="stat-uv">--</dd>
+          </div>
         </dl>
       </div>
       <div class="hero-diorama-wrap">
@@ -126,17 +134,14 @@
           <h2 id="hourly-heading" class="section-title">Next 24 Hours</h2>
           <p id="hourly-takeaway" class="section-takeaway">—</p>
         </div>
-        <div class="scroller-nav">
-          <button type="button" id="hourly-prev" class="iso-btn sm-btn" aria-label="Scroll earlier hours">‹</button>
-          <button type="button" id="hourly-next" class="iso-btn sm-btn" aria-label="Scroll later hours">›</button>
-        </div>
+        <button type="button" id="hourly-expand-btn" class="iso-btn sm-btn" aria-expanded="false">Show 24h</button>
       </div>
-      <ol id="hourly-list" class="hourly-scroller" tabindex="0" aria-label="24-hour forecast"></ol>
+      <ol id="hourly-list" class="hourly-list" aria-label="Hourly forecast"></ol>
     </section>
 
     <section class="iso-slab daily-slab" aria-labelledby="daily-heading">
       <div class="section-header">
-        <h2 id="daily-heading" class="section-title">7-Day Forecast</h2>
+        <h2 id="daily-heading" class="section-title">10-Day Forecast</h2>
         <p id="daily-takeaway" class="section-takeaway">Temperature range</p>
       </div>
       <ol id="daily-list" class="daily-list"></ol>

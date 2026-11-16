@@ -57,7 +57,7 @@ export function formatPlaceLabel(loc) {
 }
 
 function cacheKey(lat, lon) {
-  return `ws_cache_v3_${Number(lat).toFixed(2)}_${Number(lon).toFixed(2)}`;
+  return `ws_cache_v4_${Number(lat).toFixed(2)}_${Number(lon).toFixed(2)}`;
 }
 
 export function getCachedForecast(lat, lon) {
@@ -83,7 +83,7 @@ export async function fetchForecast(lat, lon) {
   const params = new URLSearchParams({
     latitude: Number(lat).toFixed(4),
     longitude: Number(lon).toFixed(4),
-    current: 'temperature_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_gusts_10m',
+    current: 'temperature_2m,apparent_temperature,relative_humidity_2m,uv_index,is_day,precipitation,weather_code,wind_speed_10m,wind_gusts_10m',
     minutely_15: 'precipitation,weather_code',
     forecast_minutely_15: '8',
     hourly: 'temperature_2m,precipitation_probability,precipitation,weather_code,is_day',
@@ -92,7 +92,7 @@ export async function fetchForecast(lat, lon) {
     wind_speed_unit: 'mph',
     precipitation_unit: 'inch',
     timezone: 'auto',
-    forecast_days: '8',
+    forecast_days: '10',
   });
 
   const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;

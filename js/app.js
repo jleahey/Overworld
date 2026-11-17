@@ -9,6 +9,7 @@ import {
   renderHeroDiorama,
   renderHourlyCurveSegment,
   renderMiniIsoIcon,
+  tempRangeGradient,
 } from './iso-art.js';
 import {
   buildHeroSceneState,
@@ -264,6 +265,9 @@ const els = {
   statWind: document.getElementById('stat-wind'),
   statPrecipLabel: document.getElementById('stat-precip-label'),
   statPrecip: document.getElementById('stat-precip'),
+  tileWind: document.getElementById('tile-wind'),
+  tileHumidity: document.getElementById('tile-humidity'),
+  tileUv: document.getElementById('tile-uv'),
   statHumidity: document.getElementById('stat-humidity'),
   statUv: document.getElementById('stat-uv'),
   heroDiorama: document.getElementById('hero-diorama'),
@@ -446,23 +450,37 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
   els.currentSummary.textContent = scene.label;
   els.statFeels.textContent = formatTemp(current.apparent_temperature, unit);
   els.statHiLow.textContent = `${formatTemp(daily.temperature_2m_max[0], unit)} / ${formatTemp(daily.temperature_2m_min[0], unit)}`;
-  const windVal = Number(current.wind_speed_10m ?? 0);
-  const gustVal = Number(current.wind_gusts_10m ?? 0);
-  els.statWind.textContent =
-    gustVal >= windVal + 6
-      ? `${formatSpeed(windVal, unit)} · G${unit === 'C' ? Math.round(gustVal * 1.60934) : Math.round(gustVal)}`
-      : formatSpeed(windVal, unit);
 
   const precipInfo = describeImmediatePrecip(forecast, currentHourIdx, unit);
   els.statPrecipLabel.textContent = precipInfo.label;
   els.statPrecip.textContent = precipInfo.value;
 
-  const humidity = current.relative_humidity_2m;
-  els.statHumidity.textContent = Number.isFinite(Number(humidity)) ? `${Math.round(Number(humidity))}%` : '--%';
+  // Show Wind, Humidity, and UV Index chips only when abnormal
+  const windVal = Number(current.wind_speed_10m ?? 0);
+  const gustVal = Number(current.wind_gusts_10m ?? 0);
+  const abnormalWind = windVal >= 15 || gustVal >= 25;
+  els.tileWind.hidden = !abnormalWind;
+  if (abnormalWind) {
+    els.statWind.textContent =
+      gustVal >= windVal + 6
+        ? `${formatSpeed(windVal, unit)} (${unit === 'C' ? Math.round(gustVal * 1.60934) : Math.round(gustVal)} gusts)`
+        : formatSpeed(windVal, unit);
+  }
 
-  const uvVal = Number(current.uv_index ?? 0);
-  const uvLabel = uvVal >= 11 ? 'Extr' : uvVal >= 8 ? 'V.High' : uvVal >= 6 ? 'High' : uvVal >= 3 ? 'Mod' : 'Low';
-  els.statUv.textContent = Number.isFinite(Number(current.uv_index)) ? `${Math.round(uvVal)} · ${uvLabel}` : '--';
+  const humidity = Number(current.relative_humidity_2m);
+  const abnormalHumidity = Number.isFinite(humidity) && (humidity >= 78 || humidity <= 22);
+  els.tileHumidity.hidden = !abnormalHumidity;
+  if (abnormalHumidity) {
+    els.statHumidity.textContent = `${humidity >= 78 ? 'Humid' : 'Dry'} · ${Math.round(humidity)}%`;
+  }
+
+  const uvVal = Number(current.uv_index);
+  const abnormalUv = Number.isFinite(uvVal) && uvVal >= 6;
+  els.tileUv.hidden = !abnormalUv;
+  if (abnormalUv) {
+    const uvLabel = uvVal >= 11 ? 'Extreme' : uvVal >= 8 ? 'Very High' : 'High';
+    els.statUv.textContent = `${Math.round(uvVal)} · ${uvLabel}`;
+  }
 
   // Dynamic multi-signal hero isometric diorama
   const liveHeroScene = buildHeroSceneState(forecast, currentHourIdx);
@@ -550,26 +568,19 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
   }
   els.hourlyList.replaceChildren(...hourCards);
 
-  // 10-day forecast (horizontal connected elevation strip matching 24h view)
+  // 10-day forecast (horizontal columns with vertical color-graded high/low bars)
   const dayCount = Math.min(10, daily.time.length);
-  const dayHighs = [];
-  for (let i = 0; i < dayCount; i += 1) {
-    dayHighs.push(Number(daily.temperature_2m_max[i]));
-  }
-  const minDayHigh = Math.min(...dayHighs);
-  const maxDayHigh = Math.max(...dayHighs);
-  const spanDayHigh = maxDayHigh - minDayHigh;
-  const dayYCoords = dayHighs.map((tempF) => {
-    if (spanDayHigh < 0.5) return 32.5;
-    const ratio = (tempF - minDayHigh) / spanDayHigh;
-    return 43 - ratio * 21;
-  });
+  const weekLow = Math.min(...daily.temperature_2m_min.slice(0, dayCount).map(Number));
+  const weekHigh = Math.max(...daily.temperature_2m_max.slice(0, dayCount).map(Number));
+  const weekSpan = Math.max(1, weekHigh - weekLow);
 
   const dayCards = [];
   for (let i = 0; i < dayCount; i += 1) {
     const lowF = Number(daily.temperature_2m_min[i]);
-    const highF = dayHighs[i];
+    const highF = Number(daily.temperature_2m_max[i]);
     const pop = Math.round(Number(daily.precipitation_probability_max[i] ?? 0));
+    const bottomPct = ((lowF - weekLow) / weekSpan) * 100;
+    const spanPct = ((highF - lowF) / weekSpan) * 100;
 
     const li = document.createElement('li');
     li.className = i === 0 ? 'hour-card is-now' : 'hour-card';
@@ -586,35 +597,68 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
       tempF: (lowF + highF) / 2,
     });
 
-    const curveWrap = document.createElement('div');
-    curveWrap.className = 'hour-curve-wrap';
-    curveWrap.innerHTML = renderHourlyCurveSegment({
-      tempLabel: formatTemp(highF, unit),
-      tempF: highF,
-      yPrev: dayYCoords[Math.max(0, i - 1)],
-      yCurr: dayYCoords[i],
-      yNext: dayYCoords[Math.min(dayYCoords.length - 1, i + 1)],
-      isFirst: i === 0,
-      isLast: i === dayYCoords.length - 1,
-    });
+    const vbarCol = document.createElement('div');
+    vbarCol.className = 'day-vbar-col';
+
+    const highSpan = document.createElement('span');
+    highSpan.className = 'day-high-label';
+    highSpan.textContent = formatTemp(highF, unit);
+
+    const vtrack = document.createElement('div');
+    vtrack.className = 'day-vtrack';
+    const vfill = document.createElement('div');
+    vfill.className = 'day-vfill';
+    vfill.style.setProperty('--vrange-bottom', `${bottomPct.toFixed(1)}%`);
+    vfill.style.setProperty('--vrange-span', `${spanPct.toFixed(1)}%`);
+    vfill.style.setProperty('--vrange-gradient', tempRangeGradient(highF, lowF, '180deg'));
+    vtrack.appendChild(vfill);
+
+    if (i === 0) {
+      const nowPos = Math.max(0, Math.min(100, ((Number(current.temperature_2m) - weekLow) / weekSpan) * 100));
+      const dot = document.createElement('span');
+      dot.className = 'day-vnow-dot';
+      dot.style.setProperty('--vnow-pos', `${nowPos.toFixed(1)}%`);
+      vtrack.appendChild(dot);
+    }
 
     const lowSpan = document.createElement('span');
     lowSpan.className = 'day-low-label';
     lowSpan.textContent = formatTemp(lowF, unit);
 
+    vbarCol.append(highSpan, vtrack, lowSpan);
+
     const popSpan = document.createElement('span');
     popSpan.className = pop >= 10 ? 'hour-pop' : 'hour-pop is-dry';
     popSpan.textContent = `${pop}%`;
 
-    li.append(daySpan, iconDiv, curveWrap, lowSpan, popSpan);
+    li.append(daySpan, iconDiv, vbarCol, popSpan);
     dayCards.push(li);
   }
   els.dailyList.replaceChildren(...dayCards);
 }
 
 // ============================================================================
-// Data Loading Pipeline (Stale-While-Revalidate + NWS Alerts)
+// Data Loading Pipeline (5-min Cache + Open-Meteo / Met.no Fallback)
 // ============================================================================
+
+function clearDisplayedWeather(loc) {
+  els.cityHeading.textContent = loc.name;
+  els.locationKicker.textContent = `${formatPlaceLabel(loc) || 'Loading'} · Loading forecast…`;
+  els.currentTemp.textContent = '--°';
+  els.currentSummary.textContent = '—';
+  els.statFeels.textContent = '--°';
+  els.statHiLow.textContent = '--° / --°';
+  els.statPrecipLabel.textContent = 'Next Hour';
+  els.statPrecip.textContent = '--';
+  els.tileWind.hidden = true;
+  els.tileHumidity.hidden = true;
+  els.tileUv.hidden = true;
+  els.hourlyTakeaway.textContent = '—';
+  els.hourlyList.replaceChildren();
+  els.dailyList.replaceChildren();
+  els.alertsSlot.hidden = true;
+  els.alertsSlot.replaceChildren();
+}
 
 async function loadWeatherForLocation(loc) {
   const seq = ++appState.requestSeq;
@@ -630,13 +674,15 @@ async function loadWeatherForLocation(loc) {
     appState.forecast = cached.data;
     appState.alerts = [];
     renderAll({
-      freshnessLabel: cached.isFresh ? 'Cached · fresh' : 'Cached · refreshing…',
+      freshnessLabel: 'Updated just now',
       isInitialLocationLoad: true,
     });
-  } else {
-    els.cityHeading.textContent = loc.name;
-    els.locationKicker.textContent = `${formatPlaceLabel(loc) || 'Loading'} · Fetching forecast…`;
+    return;
   }
+
+  appState.forecast = null;
+  appState.alerts = [];
+  clearDisplayedWeather(loc);
 
   try {
     const [freshForecast, alerts] = await Promise.all([
@@ -649,17 +695,12 @@ async function loadWeatherForLocation(loc) {
     appState.alerts = alerts;
     renderAll({
       freshnessLabel: 'Updated just now',
-      isInitialLocationLoad: !cached,
+      isInitialLocationLoad: true,
     });
-    prefetchAdjacentLocations();
   } catch {
     if (seq !== appState.requestSeq) return;
-    if (appState.forecast) {
-      renderAll({ freshnessLabel: 'Offline · showing cached forecast' });
-    } else {
-      els.locationKicker.textContent = 'Unable to reach weather service';
-      els.currentSummary.textContent = 'Check your connection and try again';
-    }
+    els.locationKicker.textContent = `${formatPlaceLabel(loc) || loc.name} · Unable to reach weather service`;
+    els.currentSummary.textContent = 'Check your connection and try again';
   }
 }
 

@@ -2,8 +2,8 @@
 // Overworld — Keyless Weather Data, Geocoding, NWS Alerts & SWR Cache
 // ============================================================================
 
-const CACHE_FRESH_MS = 10 * 60 * 1000;
-const CACHE_MAX_MS = 60 * 60 * 1000;
+const CACHE_FRESH_MS = 5 * 60 * 1000;
+const CACHE_MAX_MS = 5 * 60 * 1000;
 
 const US_STATES = {
   AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
@@ -79,6 +79,110 @@ export function getCachedForecast(lat, lon) {
   }
 }
 
+function metSymbolToWmo(symbol = '') {
+  const s = String(symbol).toLowerCase();
+  if (s.includes('thunder')) return 95;
+  if (s.includes('heavysnow')) return 75;
+  if (s.includes('snow')) return 71;
+  if (s.includes('sleet')) return 66;
+  if (s.includes('heavyrain')) return 65;
+  if (s.includes('rainshowers')) return 80;
+  if (s.includes('rain')) return 61;
+  if (s.includes('fog')) return 45;
+  if (s.includes('cloudy')) return 3;
+  if (s.includes('partlycloudy')) return 2;
+  if (s.includes('fair')) return 1;
+  return 0;
+}
+
+function toLocalIsoMinute(utcIso, offsetSec) {
+  const ms = Date.parse(utcIso) + offsetSec * 1000;
+  const d = new Date(ms);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
+async function fetchMetNoFallback(lat, lon) {
+  const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${Number(lat).toFixed(4)}&lon=${Number(lon).toFixed(4)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(7000) });
+  if (!res.ok) throw new Error(`Fallback weather request failed (${res.status})`);
+  const json = await res.json();
+  const series = json?.properties?.timeseries;
+  if (!Array.isArray(series) || !series.length) throw new Error('Empty fallback forecast');
+
+  const offsetSec = Math.round(Number(lon) / 15) * 3600;
+  const cToF = (c) => (Number(c) * 9) / 5 + 32;
+  const msToMph = (ms) => Number(ms) * 2.23694;
+  const mmToIn = (mm) => Number(mm) / 25.4;
+
+  const first = series[0];
+  const d0 = first.data?.instant?.details || {};
+  const n1 = first.data?.next_1_hours || first.data?.next_6_hours || {};
+  const sym0 = n1.summary?.symbol_code || 'fair_day';
+  const isDay0 = sym0.includes('night') ? 0 : 1;
+
+  const hourly = { time: [], temperature_2m: [], precipitation_probability: [], precipitation: [], weather_code: [], is_day: [] };
+  const dailyMap = new Map();
+
+  for (const pt of series) {
+    const dt = pt.data?.instant?.details || {};
+    const nx = pt.data?.next_1_hours || pt.data?.next_6_hours || {};
+    const sym = nx.summary?.symbol_code || 'fair_day';
+    const localIso = toLocalIsoMinute(pt.time, offsetSec);
+    const dayKey = localIso.slice(0, 10);
+    const tempF = cToF(dt.air_temperature ?? 15);
+    const precipIn = mmToIn(nx.details?.precipitation_amount ?? 0);
+    const wmo = metSymbolToWmo(sym);
+    const pop = wmo >= 51 ? Math.min(95, Math.max(35, Math.round(precipIn * 300 + 35))) : wmo === 3 ? 15 : 5;
+
+    if (hourly.time.length < 48) {
+      hourly.time.push(localIso);
+      hourly.temperature_2m.push(tempF);
+      hourly.precipitation_probability.push(pop);
+      hourly.precipitation.push(precipIn);
+      hourly.weather_code.push(wmo);
+      hourly.is_day.push(sym.includes('night') ? 0 : 1);
+    }
+
+    if (!dailyMap.has(dayKey)) {
+      dailyMap.set(dayKey, { min: tempF, max: tempF, pop: pop, sum: precipIn, code: wmo });
+    } else {
+      const rec = dailyMap.get(dayKey);
+      if (tempF < rec.min) rec.min = tempF;
+      if (tempF > rec.max) rec.max = tempF;
+      if (pop > rec.pop) rec.pop = pop;
+      rec.sum += precipIn;
+      if (wmo > rec.code) rec.code = wmo;
+    }
+  }
+
+  const days = Array.from(dailyMap.entries()).slice(0, 10);
+  return {
+    timezone: 'UTC',
+    current: {
+      time: hourly.time[0],
+      temperature_2m: cToF(d0.air_temperature ?? 15),
+      apparent_temperature: cToF(d0.air_temperature ?? 15),
+      relative_humidity_2m: Number(d0.relative_humidity ?? 50),
+      uv_index: 0,
+      is_day: isDay0,
+      precipitation: mmToIn(n1.details?.precipitation_amount ?? 0),
+      weather_code: metSymbolToWmo(sym0),
+      wind_speed_10m: msToMph(d0.wind_speed ?? 0),
+      wind_gusts_10m: msToMph(d0.wind_speed ?? 0),
+    },
+    hourly,
+    daily: {
+      time: days.map(([k]) => k),
+      weather_code: days.map(([, v]) => v.code),
+      temperature_2m_max: days.map(([, v]) => v.max),
+      temperature_2m_min: days.map(([, v]) => v.min),
+      precipitation_probability_max: days.map(([, v]) => v.pop),
+      precipitation_sum: days.map(([, v]) => v.sum),
+    },
+  };
+}
+
 export async function fetchForecast(lat, lon) {
   const params = new URLSearchParams({
     latitude: Number(lat).toFixed(4),
@@ -96,20 +200,14 @@ export async function fetchForecast(lat, lon) {
   });
 
   const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
-  let res;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-      if (res.ok || (res.status < 500 && res.status !== 429)) break;
-    } catch (err) {
-      if (attempt === 1) throw err;
-    }
-    await new Promise((r) => setTimeout(r, 400));
+  let data;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) throw new Error(`Forecast request failed (${res.status})`);
+    data = await res.json();
+  } catch {
+    data = await fetchMetNoFallback(lat, lon);
   }
-  if (!res || !res.ok) {
-    throw new Error(`Forecast request failed (${res?.status ?? 'network'})`);
-  }
-  const data = await res.json();
 
   try {
     localStorage.setItem(cacheKey(lat, lon), JSON.stringify({ data, savedAt: Date.now() }));

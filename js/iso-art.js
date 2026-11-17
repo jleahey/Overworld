@@ -1280,14 +1280,14 @@ export function tempToHex(tempF) {
   return rgbToHex(tempToRgb(tempF));
 }
 
-export function tempRangeGradient(lowF, highF) {
+export function tempRangeGradient(lowF, highF, direction = '90deg') {
   const lo = Number(lowF);
   const hi = Number(highF);
   const stops = [0, 0.25, 0.5, 0.75, 1].map((f) => {
     const c = tempToHex(lo + (hi - lo) * f);
     return `${c} ${Math.round(f * 100)}%`;
   });
-  return `linear-gradient(90deg, ${stops.join(', ')})`;
+  return `linear-gradient(${direction}, ${stops.join(', ')})`;
 }
 
 export function renderHourlyCurveSegment({

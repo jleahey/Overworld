@@ -810,10 +810,16 @@ details[open] > summary::before {
    ========================================================================== */
 
 .hero-slab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.hero-top-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.5rem;
 }
 
 .hero-readout {
@@ -861,7 +867,7 @@ details[open] > summary::before {
 }
 
 .stats-grid {
-  margin: 0.9rem 0 0;
+  margin: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   gap: 0.5rem;
@@ -929,8 +935,7 @@ details[open] > summary::before {
 }
 
 .hero-diorama {
-  width: 100%;
-  max-width: 220px;
+  width: clamp(118px, 34vw, 152px);
   aspect-ratio: 292 / 246;
   display: grid;
   place-items: center;
@@ -2003,12 +2008,11 @@ dialog::backdrop {
     gap: 1.15rem;
   }
 
-  .hero-slab {
-    grid-template-columns: minmax(0, 1.35fr) minmax(210px, 252px);
+  .hero-top-row {
     gap: 1rem;
   }
 
   .hero-diorama {
-    max-width: 248px;
+    width: 184px;
   }
 }

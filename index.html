@@ -96,44 +96,46 @@
     <section id="alerts-slot" class="alerts-slot" hidden aria-label="Active weather alerts"></section>
 
     <section class="iso-slab hero-slab" aria-labelledby="city-heading">
-      <div class="hero-readout">
-        <p id="location-kicker" class="location-kicker">Loading forecast…</p>
-        <h1 id="city-heading" class="city-heading" tabindex="-1">—</h1>
-        <div class="current-primary">
-          <span id="current-temp" class="current-temp">--°</span>
-          <span id="current-summary" class="current-summary">—</span>
+      <div class="hero-top-row">
+        <div class="hero-readout">
+          <p id="location-kicker" class="location-kicker">Loading forecast…</p>
+          <h1 id="city-heading" class="city-heading" tabindex="-1">—</h1>
+          <div class="current-primary">
+            <span id="current-temp" class="current-temp">--°</span>
+            <span id="current-summary" class="current-summary">—</span>
+          </div>
         </div>
-        <dl id="current-stats" class="stats-grid" aria-label="Current weather metrics">
-          <div class="stat-tile">
-            <dt>Feels Like</dt>
-            <dd id="stat-feels">--°</dd>
-          </div>
-          <div class="stat-tile">
-            <dt>High / Low</dt>
-            <dd id="stat-hilow">--° / --°</dd>
-          </div>
-          <div class="stat-tile">
-            <dt id="stat-precip-label">Next Hour</dt>
-            <dd id="stat-precip">--</dd>
-          </div>
-          <div id="tile-wind" class="stat-tile" hidden>
-            <dt>Wind</dt>
-            <dd id="stat-wind">--</dd>
-          </div>
-          <div id="tile-humidity" class="stat-tile" hidden>
-            <dt>Humidity</dt>
-            <dd id="stat-humidity">--%</dd>
-          </div>
-          <div id="tile-uv" class="stat-tile" hidden>
-            <dt>UV Index</dt>
-            <dd id="stat-uv">--</dd>
-          </div>
-        </dl>
+        <div class="hero-diorama-wrap">
+          <div id="hero-diorama" class="hero-diorama" role="img" aria-label="Isometric illustration of current weather"></div>
+          <button type="button" id="hero-debug-reset" class="hero-debug-pill" hidden>Previewing debug scene · Reset to live</button>
+        </div>
       </div>
-      <div class="hero-diorama-wrap">
-        <div id="hero-diorama" class="hero-diorama" role="img" aria-label="Isometric illustration of current weather"></div>
-        <button type="button" id="hero-debug-reset" class="hero-debug-pill" hidden>Previewing debug scene · Reset to live</button>
-      </div>
+      <dl id="current-stats" class="stats-grid" aria-label="Current weather metrics">
+        <div class="stat-tile">
+          <dt>Feels Like</dt>
+          <dd id="stat-feels">--°</dd>
+        </div>
+        <div class="stat-tile">
+          <dt>High / Low</dt>
+          <dd id="stat-hilow">--° / --°</dd>
+        </div>
+        <div class="stat-tile">
+          <dt id="stat-precip-label">Next Hour</dt>
+          <dd id="stat-precip">--</dd>
+        </div>
+        <div id="tile-wind" class="stat-tile" hidden>
+          <dt>Wind</dt>
+          <dd id="stat-wind">--</dd>
+        </div>
+        <div id="tile-humidity" class="stat-tile" hidden>
+          <dt>Humidity</dt>
+          <dd id="stat-humidity">--%</dd>
+        </div>
+        <div id="tile-uv" class="stat-tile" hidden>
+          <dt>UV Index</dt>
+          <dd id="stat-uv">--</dd>
+        </div>
+      </dl>
     </section>
 
     <section class="iso-slab hourly-slab" aria-labelledby="hourly-heading">

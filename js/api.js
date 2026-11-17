@@ -183,6 +183,8 @@ async function fetchMetNoFallback(lat, lon) {
   };
 }
 
+let preferFallbackProvider = false;
+
 export async function fetchForecast(lat, lon) {
   const params = new URLSearchParams({
     latitude: Number(lat).toFixed(4),
@@ -200,14 +202,26 @@ export async function fetchForecast(lat, lon) {
   });
 
   const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
-  let data;
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+  const openMeteoPromise = (async () => {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5500) });
     if (!res.ok) throw new Error(`Forecast request failed (${res.status})`);
-    data = await res.json();
-  } catch {
-    data = await fetchMetNoFallback(lat, lon);
-  }
+    const json = await res.json();
+    preferFallbackProvider = false;
+    return json;
+  })().catch((err) => {
+    preferFallbackProvider = true;
+    throw err;
+  });
+
+  const hedgeDelayMs = preferFallbackProvider ? 0 : 1200;
+  const hedgedFallbackPromise = (async () => {
+    if (hedgeDelayMs > 0) {
+      await new Promise((r) => setTimeout(r, hedgeDelayMs));
+    }
+    return fetchMetNoFallback(lat, lon);
+  })();
+
+  const data = await Promise.any([openMeteoPromise, hedgedFallbackPromise]);
 
   try {
     localStorage.setItem(cacheKey(lat, lon), JSON.stringify({ data, savedAt: Date.now() }));

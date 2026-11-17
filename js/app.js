@@ -669,6 +669,9 @@ async function loadWeatherForLocation(loc) {
   syncRadarToggleCta();
   syncLocationUrlAndStorage(loc);
 
+  // Start NWS alerts independently so it never blocks rendering hero numbers
+  const alertsPromise = fetchNwsAlerts(loc.lat, loc.lon, loc.countryCode).catch(() => []);
+
   const cached = getCachedForecast(loc.lat, loc.lon);
   if (cached) {
     appState.forecast = cached.data;
@@ -676,6 +679,11 @@ async function loadWeatherForLocation(loc) {
     renderAll({
       freshnessLabel: 'Updated just now',
       isInitialLocationLoad: true,
+    });
+    alertsPromise.then((alerts) => {
+      if (seq !== appState.requestSeq || !alerts.length) return;
+      appState.alerts = alerts;
+      renderAlerts(alerts);
     });
     return;
   }
@@ -685,17 +693,23 @@ async function loadWeatherForLocation(loc) {
   clearDisplayedWeather(loc);
 
   try {
-    const [freshForecast, alerts] = await Promise.all([
-      fetchForecast(loc.lat, loc.lon),
-      fetchNwsAlerts(loc.lat, loc.lon, loc.countryCode),
-    ]);
+    const freshForecast = await fetchForecast(loc.lat, loc.lon);
     if (seq !== appState.requestSeq) return;
 
     appState.forecast = freshForecast;
-    appState.alerts = alerts;
     renderAll({
       freshnessLabel: 'Updated just now',
       isInitialLocationLoad: true,
+    });
+
+    alertsPromise.then((alerts) => {
+      if (seq !== appState.requestSeq || !alerts.length) return;
+      appState.alerts = alerts;
+      renderAlerts(alerts);
+      const currentHourIdx = findCurrentHourIndex(freshForecast.hourly.time, freshForecast.current.time);
+      const interest = evaluateRadarInterest(freshForecast, alerts, currentHourIdx);
+      els.radarReasonBadge.textContent = interest.reason;
+      els.radarReasonBadge.dataset.interesting = String(interest.interesting);
     });
   } catch {
     if (seq !== appState.requestSeq) return;

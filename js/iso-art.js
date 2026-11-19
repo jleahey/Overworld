@@ -1036,23 +1036,39 @@ export const HERO_SCENE_PRESETS = [
 ];
 
 export const MINI_ICON_SPECS = [
-  { label: 'Clear Day', code: 0, isDay: 1, opts: { precipProb: 0, tempF: 72 } },
-  { label: 'Clear Night', code: 0, isDay: 0, opts: { precipProb: 0, tempF: 55 } },
-  { label: 'Partly Day', code: 2, isDay: 1, opts: { precipProb: 5, tempF: 68 } },
-  { label: 'Partly Night', code: 2, isDay: 0, opts: { precipProb: 5, tempF: 52 } },
-  { label: 'Overcast', code: 3, isDay: 1, opts: { precipProb: 15, tempF: 58 } },
-  { label: 'Fog', code: 45, isDay: 1, opts: { precipProb: 10, tempF: 49 } },
-  { label: 'Light Rain', code: 61, isDay: 1, opts: { precipProb: 35, precipInches: 0.02, tempF: 56 } },
-  { label: 'Rain', code: 63, isDay: 1, opts: { precipProb: 60, precipInches: 0.08, tempF: 54 } },
-  { label: 'Heavy Rain', code: 65, isDay: 1, opts: { precipProb: 90, precipInches: 0.25, tempF: 52 } },
-  { label: 'Light Snow', code: 71, isDay: 1, opts: { precipProb: 40, tempF: 30 } },
-  { label: 'Heavy Snow', code: 75, isDay: 1, opts: { precipProb: 85, tempF: 24 } },
-  { label: 'Storm', code: 95, isDay: 1, opts: { precipProb: 85, tempF: 74 } },
+  { label: 'Clear Day', cue: 'Sunny & clear', code: 0, isDay: 1, opts: { precipProb: 0, tempF: 72 } },
+  { label: 'Clear Night', cue: 'Starry clear sky', code: 0, isDay: 0, opts: { precipProb: 0, tempF: 55 } },
+  { label: 'Partly Cloudy', cue: 'Sun + white cloud', code: 2, isDay: 1, opts: { precipProb: 5, tempF: 68 } },
+  { label: 'Partly Night', cue: 'Moon + night cloud', code: 2, isDay: 0, opts: { precipProb: 5, tempF: 52 } },
+  { label: 'Overcast', cue: 'Layered grey clouds', code: 3, isDay: 1, opts: { precipProb: 15, tempF: 58 } },
+  { label: 'Fog', cue: 'Mist & low fog bands', code: 45, isDay: 1, opts: { precipProb: 10, tempF: 49 } },
+  { label: 'Light Rain', cue: 'Drizzle · 2 drops', code: 61, isDay: 1, opts: { precipProb: 35, precipInches: 0.02, tempF: 56 } },
+  { label: 'Rain', cue: 'Steady rain · 3 drops', code: 63, isDay: 1, opts: { precipProb: 60, precipInches: 0.08, tempF: 54 } },
+  { label: 'Heavy Rain', cue: 'Downpour · 5 drops', code: 65, isDay: 1, opts: { precipProb: 90, precipInches: 0.25, tempF: 52 } },
+  { label: 'Light Snow', cue: 'Flurries · 2 crystals', code: 71, isDay: 1, opts: { precipProb: 40, tempF: 30 } },
+  { label: 'Heavy Snow', cue: 'Snowfall · 3 crystals', code: 75, isDay: 1, opts: { precipProb: 85, tempF: 24 } },
+  { label: 'Thunderstorm', cue: 'Lightning & storm cell', code: 95, isDay: 1, opts: { precipProb: 85, tempF: 74 } },
 ];
 
 // ============================================================================
-// Compact 48x48 Isometric Weather Voxel Icons (Hourly & Daily Rows)
+// Compact 48x48 Isometric Weather Voxel Icons & Precip Glyphs (Hourly & Daily)
 // ============================================================================
+
+export function isSnowPrecip(weatherCode, tempF = 60) {
+  const code = Number(weatherCode ?? 0);
+  const t = Number(tempF ?? 60);
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return true;
+  if (code >= 51 && code <= 67 && t <= 32) return true;
+  if (code < 51 && t <= 32) return true;
+  return false;
+}
+
+export function renderPrecipGlyph(isSnow = false) {
+  if (isSnow) {
+    return '<svg class="pop-glyph is-flake" viewBox="0 0 14 14" aria-hidden="true"><g stroke="currentColor" stroke-width="1.65" stroke-linecap="round"><line x1="7" y1="1.3" x2="7" y2="12.7"/><line x1="2.1" y1="4.15" x2="11.9" y2="9.85"/><line x1="2.1" y1="9.85" x2="11.9" y2="4.15"/></g></svg>';
+  }
+  return '<svg class="pop-glyph is-drop" viewBox="0 0 12 14" aria-hidden="true"><path d="M6 1.1C6 1.1 1.6 6.2 1.6 9.1a4.4 4.4 0 0 0 8.8 0C10.4 6.2 6 1.1 6 1.1Z" fill="currentColor"/></svg>';
+}
 
 function snowflakeSprite(cx, cy, r = 4.6) {
   const dx = Number((r * 0.866).toFixed(1));
@@ -1062,6 +1078,32 @@ function snowflakeSprite(cx, cy, r = 4.6) {
     <line x1="${cx - dx}" y1="${cy - dy}" x2="${cx + dx}" y2="${cy + dy}"/>
     <line x1="${cx - dx}" y1="${cy + dy}" x2="${cx + dx}" y2="${cy - dy}"/>
   </g>`;
+}
+
+function renderMiniCloudPuffs(proj, pal) {
+  return (
+    isoBox(proj, -1.35, -0.22, 0.0, 0.72, 0.88, 0.54, pal) +
+    isoBox(proj, -0.78, -0.46, 0.0, 1.32, 1.12, 0.68, pal) +
+    isoBox(proj, 0.42, -0.2, 0.0, 0.68, 0.86, 0.5, pal) +
+    isoBox(proj, -0.56, -0.34, 0.62, 1.04, 0.9, 0.54, pal) +
+    isoBox(proj, 0.16, -0.18, 0.46, 0.56, 0.66, 0.38, pal)
+  );
+}
+
+function renderMiniVoxelCloud(proj, palette) {
+  const outlinePal = {
+    top: palette.outline,
+    left: palette.outline,
+    right: palette.outline,
+    stroke: palette.outline,
+    strokeWidth: palette.outlineWidth ?? 2.1,
+  };
+  const fillPal = {
+    top: palette.top,
+    left: palette.left,
+    right: palette.right,
+  };
+  return `<g>${renderMiniCloudPuffs(proj, outlinePal)}${renderMiniCloudPuffs(proj, fillPal)}</g>`;
 }
 
 export function resolveIconKind(weatherCode, isDay = 1, { precipProb = null, precipInches = 0, tempF = 60 } = {}) {
@@ -1105,14 +1147,36 @@ export function resolveIconKind(weatherCode, isDay = 1, { precipProb = null, pre
   return base;
 }
 
+const MINI_KIND_INFO = {
+  clear: { dayLabel: 'Clear & Sunny', nightLabel: 'Clear Night', dayCue: 'Sunny skies', nightCue: 'Starry clear sky' },
+  partly: { dayLabel: 'Partly Cloudy', nightLabel: 'Partly Cloudy', dayCue: 'Sun & scattered white clouds', nightCue: 'Moon & scattered clouds' },
+  overcast: { label: 'Overcast', cue: 'Full grey cloud deck (dry)' },
+  fog: { label: 'Fog', cue: 'Low mist & valley fog' },
+  'light-rain': { label: 'Light Rain', cue: 'Drizzle or light showers' },
+  rain: { label: 'Rain', cue: 'Steady moderate rain' },
+  'heavy-rain': { label: 'Heavy Rain', cue: 'Heavy rain or downpour' },
+  'light-snow': { label: 'Light Snow', cue: 'Snow flurries or light snow' },
+  'heavy-snow': { label: 'Heavy Snow', cue: 'Steady or heavy snowfall' },
+  storm: { label: 'Thunderstorm', cue: 'Thunder & lightning' },
+};
+
+export function describeMiniIcon(weatherCode, isDay = 1, opts = {}) {
+  const kind = resolveIconKind(weatherCode, isDay, opts);
+  const meta = MINI_KIND_INFO[kind] || MINI_KIND_INFO.partly;
+  const label = meta.label || (isDay ? meta.dayLabel : meta.nightLabel);
+  const cue = meta.cue || (isDay ? meta.dayCue : meta.nightCue);
+  return { kind, label, cue };
+}
+
 export function renderMiniIsoIcon(weatherCode, isDay = 1, opts = {}) {
   const kind = resolveIconKind(weatherCode, isDay, opts);
   let body = '';
 
   const sunPal = { top: '#fef08a', left: '#facc15', right: '#d97706', stroke: '#b45309', strokeWidth: 0.9 };
-  const whiteCloud = { top: '#ffffff', left: '#dce7f3', right: '#b6c8dc', stroke: '#475569', strokeWidth: 1.1 };
-  const rainCloud = { top: '#eef4fa', left: '#cbd8e6', right: '#9fb3c8', stroke: '#334155', strokeWidth: 1.15 };
-  const darkCloud = { top: '#94a3b8', left: '#64748b', right: '#475569', stroke: '#1e293b', strokeWidth: 1.15 };
+  const whiteCloud = { top: '#ffffff', left: '#dbeafe', right: '#b4c9e2', outline: '#475569', outlineWidth: 2.0 };
+  const overcastFrontCloud = { top: '#e2e8f0', left: '#cbd5e1', right: '#94a3b8', outline: '#334155', outlineWidth: 2.0 };
+  const rainCloud = { top: '#e8f0f8', left: '#c5d4e6', right: '#94abc2', outline: '#334155', outlineWidth: 2.0 };
+  const darkCloud = { top: '#94a3b8', left: '#64748b', right: '#475569', outline: '#1e293b', outlineWidth: 2.1 };
 
   if (kind === 'clear') {
     if (isDay) {
@@ -1135,48 +1199,34 @@ export function renderMiniIsoIcon(weatherCode, isDay = 1, opts = {}) {
         '<polygon points="38,24 39,26.2 41.2,27.2 39,28.2 38,30.4 37,28.2 34.8,27.2 37,26.2" fill="#f59e0b"/>';
     }
   } else if (kind === 'partly') {
-    const sunProj = createProjector(31, 20, 6.2, 3.1, 6.2);
-    const cloudProj = createProjector(21, 31, 7.8, 3.9, 7.8);
+    const sunProj = createProjector(31.5, 19.5, 6.2, 3.1, 6.2);
+    const cloudProj = createProjector(21, 31.5, 7.6, 3.8, 7.6);
     const behind = isDay
-      ? '<line x1="31" y1="5" x2="31" y2="8.5" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round"/>' +
-        '<line x1="40" y1="8.5" x2="37.5" y2="11" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round"/>' +
-        '<line x1="43.5" y1="16.5" x2="40" y2="16.5" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round"/>' +
+      ? '<line x1="31.5" y1="4.5" x2="31.5" y2="8" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round"/>' +
+        '<line x1="40.5" y1="8" x2="38" y2="10.5" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round"/>' +
+        '<line x1="44" y1="16" x2="40.5" y2="16" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round"/>' +
         isoBox(sunProj, -0.65, -0.65, 0.1, 1.3, 1.3, 1.3, sunPal)
-      : '<path d="M32 9a8 8 0 1 0 7.2 11.4A6.5 6.5 0 0 1 32 9z" fill="#facc15" stroke="#b45309" stroke-width="1.1" stroke-linejoin="round"/>';
-    const frontCloud =
-      isoBox(cloudProj, -1.15, -0.45, 0.0, 1.8, 1.1, 0.72, whiteCloud) +
-      isoBox(cloudProj, -0.6, -0.42, 0.72, 1.1, 0.9, 0.52, whiteCloud);
-    body = behind + frontCloud;
+      : '<path d="M32 8.5a8 8 0 1 0 7.2 11.4A6.5 6.5 0 0 1 32 8.5z" fill="#facc15" stroke="#b45309" stroke-width="1.1" stroke-linejoin="round"/>';
+    body = behind + renderMiniVoxelCloud(cloudProj, whiteCloud);
   } else if (kind === 'overcast') {
-    const backProj = createProjector(28, 22, 7.0, 3.5, 7.0);
-    const frontProj = createProjector(20.5, 31, 7.6, 3.8, 7.6);
-    body =
-      isoBox(backProj, -1.0, -0.45, 0.0, 1.7, 1.0, 0.7, darkCloud) +
-      isoBox(backProj, -0.45, -0.42, 0.7, 1.0, 0.85, 0.48, darkCloud) +
-      isoBox(frontProj, -1.15, -0.45, 0.0, 1.85, 1.1, 0.72, whiteCloud) +
-      isoBox(frontProj, -0.55, -0.42, 0.72, 1.1, 0.9, 0.52, whiteCloud);
+    const backProj = createProjector(28.5, 21.5, 6.8, 3.4, 6.8);
+    const frontProj = createProjector(20.5, 31.5, 7.5, 3.75, 7.5);
+    body = renderMiniVoxelCloud(backProj, darkCloud) + renderMiniVoxelCloud(frontProj, overcastFrontCloud);
   } else if (kind === 'fog') {
-    const cloudProj = createProjector(25, 20, 7.4, 3.7, 7.4);
+    const cloudProj = createProjector(24.5, 20.5, 7.2, 3.6, 7.2);
     body =
-      isoBox(cloudProj, -1.1, -0.45, 0.0, 1.8, 1.05, 0.68, whiteCloud) +
-      isoBox(cloudProj, -0.55, -0.42, 0.68, 1.08, 0.85, 0.46, whiteCloud) +
-      '<line x1="9" y1="27" x2="38" y2="27" stroke="#64748b" stroke-width="3.2" stroke-linecap="round"/>' +
-      '<line x1="12" y1="33.5" x2="40" y2="33.5" stroke="#64748b" stroke-width="3.2" stroke-linecap="round"/>' +
+      renderMiniVoxelCloud(cloudProj, overcastFrontCloud) +
+      '<line x1="9" y1="27.5" x2="38" y2="27.5" stroke="#64748b" stroke-width="3.2" stroke-linecap="round"/>' +
+      '<line x1="12" y1="33.8" x2="40" y2="33.8" stroke="#64748b" stroke-width="3.2" stroke-linecap="round"/>' +
       '<line x1="10" y1="40" x2="35" y2="40" stroke="#94a3b8" stroke-width="3.2" stroke-linecap="round"/>';
   } else if (kind === 'light-rain') {
-    const proj = createProjector(25.5, 20, 8.0, 4.0, 8.0);
-    const cloud =
-      isoBox(proj, -1.15, -0.5, 0.0, 1.9, 1.1, 0.72, whiteCloud) +
-      isoBox(proj, -0.58, -0.45, 0.72, 1.12, 0.9, 0.5, whiteCloud);
+    const proj = createProjector(25, 20.5, 7.7, 3.85, 7.7);
     const drops =
-      '<line x1="18.5" y1="27" x2="15.5" y2="34" stroke="#0284c7" stroke-width="2.5" stroke-linecap="round"/>' +
-      '<line x1="29" y1="27" x2="26" y2="34" stroke="#0284c7" stroke-width="2.5" stroke-linecap="round"/>';
-    body = drops + cloud;
+      '<line x1="18.5" y1="27" x2="15.5" y2="34.5" stroke="#0284c7" stroke-width="2.5" stroke-linecap="round"/>' +
+      '<line x1="29" y1="27" x2="26" y2="34.5" stroke="#0284c7" stroke-width="2.5" stroke-linecap="round"/>';
+    body = drops + renderMiniVoxelCloud(proj, whiteCloud);
   } else if (kind === 'rain') {
-    const proj = createProjector(25.5, 20, 8.0, 4.0, 8.0);
-    const cloud =
-      isoBox(proj, -1.15, -0.5, 0.0, 1.9, 1.1, 0.72, rainCloud) +
-      isoBox(proj, -0.58, -0.45, 0.72, 1.12, 0.9, 0.5, rainCloud);
+    const proj = createProjector(25, 20.5, 7.7, 3.85, 7.7);
     const drops = [
       [14, 26.5, 10, 37],
       [24, 27.5, 19.5, 39.5],
@@ -1187,12 +1237,9 @@ export function renderMiniIsoIcon(weatherCode, isDay = 1, opts = {}) {
           `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#0284c7" stroke-width="2.7" stroke-linecap="round"/>`,
       )
       .join('');
-    body = drops + cloud;
+    body = drops + renderMiniVoxelCloud(proj, rainCloud);
   } else if (kind === 'heavy-rain') {
-    const proj = createProjector(25.5, 20, 8.0, 4.0, 8.0);
-    const cloud =
-      isoBox(proj, -1.15, -0.5, 0.0, 1.9, 1.1, 0.72, darkCloud) +
-      isoBox(proj, -0.58, -0.45, 0.72, 1.12, 0.9, 0.5, darkCloud);
+    const proj = createProjector(25, 20.5, 7.7, 3.85, 7.7);
     const drops = [
       [12, 26, 8, 37],
       [18.5, 29, 13.5, 43],
@@ -1205,32 +1252,23 @@ export function renderMiniIsoIcon(weatherCode, isDay = 1, opts = {}) {
           `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#0284c7" stroke-width="2.9" stroke-linecap="round"/>`,
       )
       .join('');
-    body = drops + cloud;
+    body = drops + renderMiniVoxelCloud(proj, darkCloud);
   } else if (kind === 'light-snow') {
-    const proj = createProjector(25.5, 20, 8.0, 4.0, 8.0);
-    const cloud =
-      isoBox(proj, -1.15, -0.5, 0.0, 1.9, 1.1, 0.72, whiteCloud) +
-      isoBox(proj, -0.58, -0.45, 0.72, 1.12, 0.9, 0.5, whiteCloud);
+    const proj = createProjector(25, 20.5, 7.7, 3.85, 7.7);
     const flakes = snowflakeSprite(18, 35, 4.5) + snowflakeSprite(30, 35, 4.5);
-    body = flakes + cloud;
+    body = flakes + renderMiniVoxelCloud(proj, whiteCloud);
   } else if (kind === 'heavy-snow') {
-    const proj = createProjector(25.5, 20, 8.0, 4.0, 8.0);
-    const cloud =
-      isoBox(proj, -1.15, -0.5, 0.0, 1.9, 1.1, 0.72, whiteCloud) +
-      isoBox(proj, -0.58, -0.45, 0.72, 1.12, 0.9, 0.5, whiteCloud);
+    const proj = createProjector(25, 20.5, 7.7, 3.85, 7.7);
     const flakes = snowflakeSprite(13.5, 34, 4.5) + snowflakeSprite(24, 39, 4.6) + snowflakeSprite(34.5, 34, 4.5);
-    body = flakes + cloud;
+    body = flakes + renderMiniVoxelCloud(proj, whiteCloud);
   } else if (kind === 'storm') {
-    const proj = createProjector(25.5, 19, 8.0, 4.0, 8.0);
-    const cloud =
-      isoBox(proj, -1.15, -0.5, 0.0, 1.9, 1.1, 0.74, darkCloud) +
-      isoBox(proj, -0.58, -0.45, 0.74, 1.12, 0.9, 0.5, darkCloud);
+    const proj = createProjector(25, 19.5, 7.7, 3.85, 7.7);
     const bolt =
       '<polygon points="24,22 18,33 23.5,33 19.5,44 30,30.5 24.5,30.5" fill="#facc15" stroke="#b45309" stroke-width="1.1" stroke-linejoin="round"/>';
     const rain =
       '<line x1="13" y1="27" x2="9" y2="38" stroke="#0284c7" stroke-width="2.7" stroke-linecap="round"/>' +
       '<line x1="35" y1="27" x2="31" y2="38" stroke="#0284c7" stroke-width="2.7" stroke-linecap="round"/>';
-    body = rain + bolt + cloud;
+    body = rain + bolt + renderMiniVoxelCloud(proj, darkCloud);
   }
 
   return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${body}</svg>`;

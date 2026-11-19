@@ -107,7 +107,6 @@
         </div>
         <div class="hero-diorama-wrap">
           <div id="hero-diorama" class="hero-diorama" role="img" aria-label="Isometric illustration of current weather"></div>
-          <button type="button" id="hero-debug-reset" class="hero-debug-pill" hidden>Previewing debug scene · Reset to live</button>
         </div>
       </div>
       <dl id="current-stats" class="stats-grid" aria-label="Current weather metrics">
@@ -194,10 +193,32 @@
 
   <footer class="site-footer">
     <div class="footer-bar">
-      <button type="button" id="unit-toggle" class="unit-toggle-mini" aria-label="°F / °C — switch to Celsius">
-        <span class="unit-pill is-active" data-unit="F">°F</span>
-        <span class="unit-pill" data-unit="C">°C</span>
-      </button>
+      <div class="footer-controls">
+        <button type="button" id="unit-toggle" class="unit-toggle-mini" aria-label="°F / °C — switch to Celsius">
+          <span class="unit-pill is-active" data-unit="F">°F</span>
+          <span class="unit-pill" data-unit="C">°C</span>
+        </button>
+
+        <button type="button" id="legend-btn" class="footer-pill-btn" commandfor="scene-debug-dialog" command="show-modal">
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+            <polygon points="8,1.5 14,4.8 8,8.1 2,4.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <polyline points="2,4.8 2,11.2 8,14.5 14,11.2 14,4.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <line x1="8" y1="8.1" x2="8" y2="14.5" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          <span>Legend</span>
+        </button>
+
+        <button type="button" id="alerts-btn" class="footer-pill-btn" aria-pressed="false">
+          <span id="alerts-dot" class="footer-status-dot" hidden aria-hidden="true"></span>
+          <svg viewBox="0 0 14 16" width="11" height="12" aria-hidden="true">
+            <path d="M7 1.3C7 1.3 2 6.8 2 10.1a5 5 0 0 0 10 0C12 6.8 7 1.3 7 1.3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          </svg>
+          <span>Rain Alerts</span>
+        </button>
+      </div>
+
+      <p id="alerts-feedback" class="footer-feedback" role="status" hidden></p>
+
       <p class="footer-sources">Sources: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> / <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OSM</a> · <a href="https://mesonet.agron.iastate.edu/" target="_blank" rel="noopener">NOAA Mesonet</a> · <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · <a href="https://www.weather.gov/" target="_blank" rel="noopener">NWS</a></p>
     </div>
   </footer>
@@ -205,36 +226,80 @@
   <dialog id="scene-debug-dialog" class="iso-dialog" closedby="any" aria-labelledby="scene-debug-title">
     <div class="dialog-header">
       <div>
-        <h2 id="scene-debug-title" class="dialog-title">Isometric Weather Art Debug</h2>
-        <p class="dialog-subtitle">Inspect all 16 dynamic sky-island stories, mix custom conditions, or preview on the main card.</p>
+        <h2 id="scene-debug-title" class="dialog-title">Weather Iconography &amp; Scene Legend</h2>
+        <p class="dialog-subtitle">Hover or tap any forecast icon to inspect it live, or browse all voxel icons and sky-island scenes below.</p>
       </div>
-      <form method="dialog">
-        <button type="submit" class="iso-btn sm-btn" autofocus>Close</button>
-      </form>
+      <button type="button" class="iso-btn sm-btn" commandfor="scene-debug-dialog" command="close" autofocus>Close</button>
     </div>
 
     <div class="dialog-body">
-      <section class="debug-mixer" aria-labelledby="mixer-heading">
+      <section class="debug-icons-section">
+        <h3 id="icons-heading" class="debug-section-title">24-Hour &amp; 10-Day Voxel Icons</h3>
+        <div id="debug-icon-grid" class="debug-icon-grid"></div>
+      </section>
+
+      <section class="legend-strip-key">
+        <h3 class="debug-section-title">Precipitation &amp; Temperature Strip Key</h3>
+        <div class="legend-key-grid">
+          <div class="legend-key-item">
+            <span class="hour-pop legend-pop-sample">
+              <svg class="pop-glyph is-drop" viewBox="0 0 12 14" aria-hidden="true"><path d="M6 1.1C6 1.1 1.6 6.2 1.6 9.1a4.4 4.4 0 0 0 8.8 0C10.4 6.2 6 1.1 6 1.1Z" fill="currentColor"/></svg>45%
+            </span>
+            <div>
+              <strong>Chance of Rain</strong>
+              <p>Liquid precipitation probability (muted when under 15%).</p>
+            </div>
+          </div>
+
+          <div class="legend-key-item">
+            <span class="hour-pop is-snow legend-pop-sample">
+              <svg class="pop-glyph is-flake" viewBox="0 0 14 14" aria-hidden="true"><g stroke="currentColor" stroke-width="1.65" stroke-linecap="round"><line x1="7" y1="1.3" x2="7" y2="12.7"/><line x1="2.1" y1="4.15" x2="11.9" y2="9.85"/><line x1="2.1" y1="9.85" x2="11.9" y2="4.15"/></g></svg>40%
+            </span>
+            <div>
+              <strong>Chance of Snow</strong>
+              <p>Shown for snow codes or freezing temperatures (32°F / 0°C and below).</p>
+            </div>
+          </div>
+
+          <div class="legend-key-item">
+            <span class="legend-temp-swatch" aria-hidden="true"></span>
+            <div>
+              <strong>Absolute Temp Scale</strong>
+              <p>3D curve &amp; 10-day bars shift from arctic indigo to spring green to scorching red.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="debug-gallery-section">
+        <div class="legend-section-head">
+          <h3 id="gallery-heading" class="debug-section-title">All 16 Hero Sky-Island Scenes</h3>
+          <p class="legend-section-note">Blends live sky, sunrise/sunset phase, temperature biome, windsock speed, and approaching 15-minute radar fronts.</p>
+        </div>
+        <div id="debug-preset-grid" class="debug-preset-grid"></div>
+      </section>
+
+      <section class="debug-mixer">
         <div class="debug-mixer-preview-col">
-          <div id="mixer-preview" class="mixer-preview" role="img" aria-label="Custom debug sky-island scene preview"></div>
+          <div id="mixer-preview" class="mixer-preview" role="img" aria-label="Custom sky-island scene sandbox"></div>
           <p id="mixer-story" class="mixer-story">—</p>
         </div>
 
         <div class="debug-mixer-controls">
-          <h3 id="mixer-heading" class="debug-section-title">Custom Scene Mixer</h3>
+          <h3 id="mixer-heading" class="debug-section-title">Sky-Island Sandbox</h3>
           <div class="mixer-fields">
-            <label class="mixer-field">
-              <span>Time of Day</span>
+            <div class="mixer-field">
+              <label for="mixer-time">Time of Day</label>
               <select id="mixer-time" class="iso-select">
                 <option value="dawn">Dawn</option>
                 <option value="day" selected>Day</option>
                 <option value="dusk">Dusk</option>
                 <option value="night">Night</option>
               </select>
-            </label>
+            </div>
 
-            <label class="mixer-field">
-              <span>Current Sky</span>
+            <div class="mixer-field">
+              <label for="mixer-sky">Current Sky</label>
               <select id="mixer-sky" class="iso-select">
                 <option value="clear">Clear</option>
                 <option value="mostly-clear" selected>Mostly Clear</option>
@@ -248,10 +313,10 @@
                 <option value="heavy-snow">Heavy Snow</option>
                 <option value="storm">Thunderstorm</option>
               </select>
-            </label>
+            </div>
 
-            <label class="mixer-field">
-              <span>Horizon Transition</span>
+            <div class="mixer-field">
+              <label for="mixer-transition">Horizon Transition</label>
               <select id="mixer-transition" class="iso-select">
                 <option value="none">Steady (None)</option>
                 <option value="rain-soon" selected>Rain Starting Soon</option>
@@ -260,10 +325,10 @@
                 <option value="cloudy-soon">Clouds Moving In</option>
                 <option value="clearing">Clearing · Rainbow</option>
               </select>
-            </label>
+            </div>
 
-            <label class="mixer-field">
-              <span>Transition ETA</span>
+            <div class="mixer-field">
+              <label for="mixer-eta">Transition ETA</label>
               <select id="mixer-eta" class="iso-select">
                 <option value="15">15 min</option>
                 <option value="30">30 min</option>
@@ -272,34 +337,19 @@
                 <option value="90">90 min</option>
                 <option value="120">2 hours</option>
               </select>
-            </label>
+            </div>
 
-            <label class="mixer-field">
-              <span>Temp (<strong id="mixer-temp-val">64°F</strong>)</span>
+            <div class="mixer-field">
+              <label for="mixer-temp">Temp (<strong id="mixer-temp-val">64°F</strong>)</label>
               <input type="range" id="mixer-temp" min="0" max="105" step="1" value="64">
-            </label>
+            </div>
 
-            <label class="mixer-field">
-              <span>Wind (<strong id="mixer-wind-val">14 mph</strong>)</span>
+            <div class="mixer-field">
+              <label for="mixer-wind">Wind (<strong id="mixer-wind-val">14 mph</strong>)</label>
               <input type="range" id="mixer-wind" min="0" max="36" step="1" value="14">
-            </label>
-          </div>
-
-          <div class="mixer-actions">
-            <button type="button" id="mixer-apply-btn" class="iso-btn sm-btn primary-btn">Apply to Main Card</button>
-            <button type="button" id="mixer-reset-btn" class="iso-btn sm-btn">Reset to Live Weather</button>
+            </div>
           </div>
         </div>
-      </section>
-
-      <section class="debug-gallery-section" aria-labelledby="gallery-heading">
-        <h3 id="gallery-heading" class="debug-section-title">All 16 Hero Sky-Island Scenes</h3>
-        <div id="debug-preset-grid" class="debug-preset-grid"></div>
-      </section>
-
-      <section class="debug-icons-section" aria-labelledby="icons-heading">
-        <h3 id="icons-heading" class="debug-section-title">All 12 Hourly &amp; Daily Voxel Icons</h3>
-        <div id="debug-icon-grid" class="debug-icon-grid"></div>
       </section>
     </div>
   </dialog>

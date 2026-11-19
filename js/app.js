@@ -6,9 +6,12 @@ import {
   HERO_SCENE_PRESETS,
   MINI_ICON_SPECS,
   classifyWeather,
+  describeMiniIcon,
+  isSnowPrecip,
   renderHeroDiorama,
   renderHourlyCurveSegment,
   renderMiniIsoIcon,
+  renderPrecipGlyph,
   tempRangeGradient,
 } from './iso-art.js';
 import {
@@ -287,7 +290,6 @@ const els = {
   dailyPrev: document.getElementById('daily-prev'),
   dailyNext: document.getElementById('daily-next'),
   dailyList: document.getElementById('daily-list'),
-  heroDebugReset: document.getElementById('hero-debug-reset'),
   sceneDebugDialog: document.getElementById('scene-debug-dialog'),
   mixerPreview: document.getElementById('mixer-preview'),
   mixerStory: document.getElementById('mixer-story'),
@@ -299,10 +301,12 @@ const els = {
   mixerTempVal: document.getElementById('mixer-temp-val'),
   mixerWind: document.getElementById('mixer-wind'),
   mixerWindVal: document.getElementById('mixer-wind-val'),
-  mixerApplyBtn: document.getElementById('mixer-apply-btn'),
-  mixerResetBtn: document.getElementById('mixer-reset-btn'),
   debugPresetGrid: document.getElementById('debug-preset-grid'),
   debugIconGrid: document.getElementById('debug-icon-grid'),
+  legendBtn: document.getElementById('legend-btn'),
+  alertsBtn: document.getElementById('alerts-btn'),
+  alertsDot: document.getElementById('alerts-dot'),
+  alertsFeedback: document.getElementById('alerts-feedback'),
 };
 
 const appState = {
@@ -312,7 +316,6 @@ const appState = {
   alerts: [],
   radarManuallyToggled: false,
   liveHeroScene: null,
-  debugHeroOverride: null,
   debugGalleryBuilt: false,
   requestSeq: 0,
 };
@@ -485,13 +488,11 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
   // Dynamic multi-signal hero isometric diorama
   const liveHeroScene = buildHeroSceneState(forecast, currentHourIdx);
   appState.liveHeroScene = liveHeroScene;
-  const activeHeroScene = appState.debugHeroOverride || liveHeroScene;
-  els.heroDiorama.innerHTML = renderHeroDiorama(activeHeroScene);
+  els.heroDiorama.innerHTML = renderHeroDiorama(liveHeroScene);
   els.heroDiorama.setAttribute(
     'aria-label',
-    `Isometric sky-island illustration: ${describeSceneStory(activeHeroScene)}`,
+    `Isometric sky-island illustration: ${describeSceneStory(liveHeroScene)}`,
   );
-  els.heroDebugReset.hidden = !appState.debugHeroOverride;
 
   // Smart conditional radar badge, collapsed by default until expanded by user
   const interest = evaluateRadarInterest(forecast, alerts, currentHourIdx);
@@ -530,22 +531,46 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     const offset = i - currentHourIdx;
     const tempF = sliceTemps[offset];
     const pop = Math.round(Number(hourly.precipitation_probability[i] ?? 0));
+    const precipIn = Number(hourly.precipitation[i] ?? 0);
+    const wmoCode = hourly.weather_code[i];
+    const isDayHr = hourly.is_day[i];
     const { hour } = parsePlainDateTime(hourly.time[i]);
+    const timeLabelCompact = offset === 0 ? 'Now' : formatHourCompact(hour);
+    const timeLabelFull = offset === 0 ? 'Now' : formatHour12(hour);
 
     const li = document.createElement('li');
     li.className = offset === 0 ? 'hour-card is-now' : 'hour-card';
 
     const timeSpan = document.createElement('span');
     timeSpan.className = 'hour-time';
-    timeSpan.textContent = offset === 0 ? 'Now' : formatHourCompact(hour);
+    timeSpan.textContent = timeLabelCompact;
 
-    const iconDiv = document.createElement('div');
-    iconDiv.className = 'hour-icon';
-    iconDiv.innerHTML = renderMiniIsoIcon(hourly.weather_code[i], hourly.is_day[i], {
-      precipProb: pop,
-      precipInches: Number(hourly.precipitation[i] ?? 0),
-      tempF,
-    });
+    const iconOpts = { precipProb: pop, precipInches: precipIn, tempF };
+    const iconMeta = describeMiniIcon(wmoCode, isDayHr, iconOpts);
+    const snowChance = isSnowPrecip(wmoCode, tempF);
+    const precipNoun = snowChance ? 'snow' : 'rain';
+    const tipId = `tip-hour-${offset}`;
+
+    const iconBtn = document.createElement('button');
+    iconBtn.type = 'button';
+    iconBtn.className = 'hour-icon';
+    iconBtn.setAttribute('interestfor', tipId);
+    iconBtn.setAttribute('popovertarget', tipId);
+    iconBtn.setAttribute('popovertargetaction', 'show');
+    iconBtn.setAttribute('aria-label', `${timeLabelFull}: ${iconMeta.label}`);
+    iconBtn.innerHTML = renderMiniIsoIcon(wmoCode, isDayHr, iconOpts);
+
+    const tipEl = document.createElement('div');
+    tipEl.id = tipId;
+    tipEl.className = 'voxel-tooltip';
+    tipEl.setAttribute('popover', 'hint');
+    const tipTitle = document.createElement('span');
+    tipTitle.className = 'voxel-tooltip-title';
+    tipTitle.textContent = `${timeLabelFull} · ${iconMeta.label}`;
+    const tipSub = document.createElement('span');
+    tipSub.className = 'voxel-tooltip-sub';
+    tipSub.textContent = `${iconMeta.cue} · ${pop}% chance of ${precipNoun}`;
+    tipEl.append(tipTitle, tipSub);
 
     const curveWrap = document.createElement('div');
     curveWrap.className = 'hour-curve-wrap';
@@ -560,13 +585,17 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     });
 
     const popSpan = document.createElement('span');
-    popSpan.className = pop >= 15 ? 'hour-pop' : 'hour-pop is-dry';
-    popSpan.textContent = `${pop}%`;
+    const popClasses = ['hour-pop'];
+    if (snowChance) popClasses.push('is-snow');
+    if (pop < 15) popClasses.push('is-dry');
+    popSpan.className = popClasses.join(' ');
+    popSpan.innerHTML = `${renderPrecipGlyph(snowChance)}<span>${pop}%</span><span class="visually-hidden"> chance of ${precipNoun}</span>`;
 
-    li.append(timeSpan, iconDiv, curveWrap, popSpan);
+    li.append(timeSpan, iconBtn, tipEl, curveWrap, popSpan);
     hourCards.push(li);
   }
   els.hourlyList.replaceChildren(...hourCards);
+  wireInterestHints(els.hourlyList);
 
   // 10-day forecast (horizontal columns with vertical color-graded high/low bars)
   const dayCount = Math.min(10, daily.time.length);
@@ -579,23 +608,46 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     const lowF = Number(daily.temperature_2m_min[i]);
     const highF = Number(daily.temperature_2m_max[i]);
     const pop = Math.round(Number(daily.precipitation_probability_max[i] ?? 0));
+    const precipSum = Number(daily.precipitation_sum[i] ?? 0);
+    const wmoCode = daily.weather_code[i];
     const bottomPct = ((lowF - weekLow) / weekSpan) * 100;
     const spanPct = ((highF - lowF) / weekSpan) * 100;
+    const dayLabel = i === 0 ? 'Today' : getWeekdayShort(daily.time[i]);
 
     const li = document.createElement('li');
     li.className = i === 0 ? 'hour-card is-now' : 'hour-card';
 
     const daySpan = document.createElement('span');
     daySpan.className = 'hour-time';
-    daySpan.textContent = i === 0 ? 'Today' : getWeekdayShort(daily.time[i]);
+    daySpan.textContent = dayLabel;
 
-    const iconDiv = document.createElement('div');
-    iconDiv.className = 'hour-icon';
-    iconDiv.innerHTML = renderMiniIsoIcon(daily.weather_code[i], 1, {
-      precipProb: pop,
-      precipInches: Number(daily.precipitation_sum[i] ?? 0),
-      tempF: (lowF + highF) / 2,
-    });
+    const midTempF = (lowF + highF) / 2;
+    const iconOpts = { precipProb: pop, precipInches: precipSum, tempF: midTempF };
+    const iconMeta = describeMiniIcon(wmoCode, 1, iconOpts);
+    const snowChance = isSnowPrecip(wmoCode, highF <= 34 ? highF : midTempF);
+    const precipNoun = snowChance ? 'snow' : 'rain';
+    const tipId = `tip-day-${i}`;
+
+    const iconBtn = document.createElement('button');
+    iconBtn.type = 'button';
+    iconBtn.className = 'hour-icon';
+    iconBtn.setAttribute('interestfor', tipId);
+    iconBtn.setAttribute('popovertarget', tipId);
+    iconBtn.setAttribute('popovertargetaction', 'show');
+    iconBtn.setAttribute('aria-label', `${dayLabel}: ${iconMeta.label}`);
+    iconBtn.innerHTML = renderMiniIsoIcon(wmoCode, 1, iconOpts);
+
+    const tipEl = document.createElement('div');
+    tipEl.id = tipId;
+    tipEl.className = 'voxel-tooltip';
+    tipEl.setAttribute('popover', 'hint');
+    const tipTitle = document.createElement('span');
+    tipTitle.className = 'voxel-tooltip-title';
+    tipTitle.textContent = `${dayLabel} · ${iconMeta.label}`;
+    const tipSub = document.createElement('span');
+    tipSub.className = 'voxel-tooltip-sub';
+    tipSub.textContent = `${iconMeta.cue} · ${pop}% chance of ${precipNoun}`;
+    tipEl.append(tipTitle, tipSub);
 
     const vbarCol = document.createElement('div');
     vbarCol.className = 'day-vbar-col';
@@ -628,13 +680,18 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     vbarCol.append(highSpan, vtrack, lowSpan);
 
     const popSpan = document.createElement('span');
-    popSpan.className = pop >= 10 ? 'hour-pop' : 'hour-pop is-dry';
-    popSpan.textContent = `${pop}%`;
+    const popClasses = ['hour-pop'];
+    if (snowChance) popClasses.push('is-snow');
+    if (pop < 10) popClasses.push('is-dry');
+    popSpan.className = popClasses.join(' ');
+    popSpan.innerHTML = `${renderPrecipGlyph(snowChance)}<span>${pop}%</span><span class="visually-hidden"> chance of ${precipNoun}</span>`;
 
-    li.append(daySpan, iconDiv, vbarCol, popSpan);
+    li.append(daySpan, iconBtn, tipEl, vbarCol, popSpan);
     dayCards.push(li);
   }
   els.dailyList.replaceChildren(...dayCards);
+  wireInterestHints(els.dailyList);
+  syncAlertsUiWithLocation();
 }
 
 // ============================================================================
@@ -664,7 +721,6 @@ async function loadWeatherForLocation(loc) {
   const seq = ++appState.requestSeq;
   appState.location = loc;
   appState.radarManuallyToggled = false;
-  appState.debugHeroOverride = null;
   els.radarDisclosure.open = false;
   syncRadarToggleCta();
   syncLocationUrlAndStorage(loc);
@@ -1539,20 +1595,6 @@ function setMixerFromScene(scene) {
   updateMixerPreview();
 }
 
-function applyDebugSceneToHero(scene) {
-  appState.debugHeroOverride = { ...scene };
-  renderAll({ freshnessLabel: 'Debug preview' });
-  els.heroDebugReset.hidden = false;
-}
-
-function resetHeroDebugOverride() {
-  appState.debugHeroOverride = null;
-  renderAll({ freshnessLabel: 'Updated just now' });
-  if (appState.liveHeroScene) {
-    setMixerFromScene(appState.liveHeroScene);
-  }
-}
-
 function highlightActivePresetCard(activeId) {
   for (const card of els.debugPresetGrid.querySelectorAll('.debug-preset-card')) {
     card.classList.toggle('is-active', card.dataset.presetId === activeId);
@@ -1580,27 +1622,11 @@ function buildDebugGallery() {
     sub.className = 'debug-preset-sub';
     sub.textContent = preset.subtitle;
 
-    const actions = document.createElement('div');
-    actions.className = 'debug-preset-actions';
-
     const tag = document.createElement('span');
     tag.className = 'debug-preset-tag';
-    tag.textContent = `${preset.scene.tempF}°F · ${preset.scene.windMph}mph`;
+    tag.textContent = `${preset.scene.tempF}°F · ${preset.scene.windMph} mph`;
 
-    const applyBtn = document.createElement('button');
-    applyBtn.type = 'button';
-    applyBtn.className = 'iso-btn sm-btn';
-    applyBtn.textContent = 'Apply';
-    applyBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setMixerFromScene(preset.scene);
-      highlightActivePresetCard(preset.id);
-      applyDebugSceneToHero(preset.scene);
-      els.sceneDebugDialog.close();
-    });
-
-    actions.append(tag, applyBtn);
-    card.append(art, title, sub, actions);
+    card.append(art, title, sub, tag);
 
     card.addEventListener('click', () => {
       setMixerFromScene(preset.scene);
@@ -1623,21 +1649,37 @@ function buildDebugGallery() {
     label.className = 'debug-icon-label';
     label.textContent = spec.label;
 
-    item.append(art, label);
+    const cue = document.createElement('span');
+    cue.className = 'debug-icon-cue';
+    cue.textContent = spec.cue || '';
+
+    item.append(art, label, cue);
     return item;
   });
   els.debugIconGrid.replaceChildren(...iconNodes);
 }
 
-function openSceneDebugDialog() {
+function prepareSceneLegendDialog() {
   buildDebugGallery();
-  setMixerFromScene(appState.debugHeroOverride || appState.liveHeroScene || HERO_SCENE_PRESETS[0].scene);
+  setMixerFromScene(appState.liveHeroScene || HERO_SCENE_PRESETS[0].scene);
+}
+
+function openSceneDebugDialog() {
+  prepareSceneLegendDialog();
   if (!els.sceneDebugDialog.open) {
     els.sceneDebugDialog.showModal();
   }
 }
 
-els.heroDebugReset?.addEventListener('click', resetHeroDebugOverride);
+els.sceneDebugDialog?.addEventListener('command', (e) => {
+  if (e.command === 'show-modal') {
+    prepareSceneLegendDialog();
+  }
+});
+
+els.legendBtn?.addEventListener('click', () => {
+  prepareSceneLegendDialog();
+});
 
 for (const ctrl of [els.mixerTime, els.mixerSky, els.mixerTransition, els.mixerEta, els.mixerTemp, els.mixerWind]) {
   ctrl?.addEventListener('input', () => {
@@ -1646,33 +1688,370 @@ for (const ctrl of [els.mixerTime, els.mixerSky, els.mixerTransition, els.mixerE
   });
 }
 
-els.mixerApplyBtn?.addEventListener('click', () => {
-  applyDebugSceneToHero(getMixerScene());
-  els.sceneDebugDialog.close();
-});
-
-els.mixerResetBtn?.addEventListener('click', () => {
-  resetHeroDebugOverride();
-  highlightActivePresetCard('');
-});
-
-els.sceneDebugDialog?.addEventListener('close', () => {
-  els.sceneDebugDialog.returnValue = '';
-});
-
-// Fallback light-dismiss for browsers lacking native dialog[closedby="any"]
-if (els.sceneDebugDialog && !('closedBy' in HTMLDialogElement.prototype)) {
-  const isOutside = (e, dialog) => {
-    const r = dialog.getBoundingClientRect();
-    return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
-  };
-  let pressedOutside = false;
-  els.sceneDebugDialog.addEventListener('pointerdown', (e) => {
-    pressedOutside = isOutside(e, els.sceneDebugDialog);
+for (const dlg of document.querySelectorAll('dialog')) {
+  dlg.addEventListener('close', () => {
+    dlg.returnValue = '';
   });
-  els.sceneDebugDialog.addEventListener('pointerup', (e) => {
-    if (pressedOutside && isOutside(e, els.sceneDebugDialog)) {
-      els.sceneDebugDialog.close();
+}
+
+// ============================================================================
+// Interest-Triggered Toggletip ARIA Wiring & Modern Web Platform Fallbacks
+// ============================================================================
+
+const ownedInterestTriggers = new WeakSet();
+
+function getTriggerAccessibleName(el) {
+  const labelledBy = el.getAttribute('aria-labelledby');
+  if (labelledBy) {
+    const text = labelledBy
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent || '')
+      .join(' ')
+      .trim();
+    if (text) return text;
+  }
+  const ariaLabel = el.getAttribute('aria-label');
+  if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
+  const textContent = el.textContent?.trim();
+  if (textContent) return textContent;
+  return (el.getAttribute('title') || '').trim();
+}
+
+function isPopoverCurrentlyOpen(popoverEl) {
+  try {
+    return popoverEl.matches(':popover-open') || popoverEl.classList.contains(':popover-open');
+  } catch {
+    return popoverEl.classList.contains(':popover-open');
+  }
+}
+
+function wireInterestHints(root = document) {
+  const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+  for (const trigger of root.querySelectorAll('[interestfor]')) {
+    const targetId = trigger.getAttribute('interestfor');
+    if (!targetId) continue;
+    const hint = document.getElementById(targetId);
+    if (!hint || hint.getAttribute('popover') !== 'hint') continue;
+
+    const triggerName = norm(getTriggerAccessibleName(trigger));
+    const hintText = norm(hint.textContent);
+    if (triggerName && triggerName === hintText) continue;
+
+    if (!hint.hasAttribute('role')) {
+      hint.setAttribute('role', 'tooltip');
+    }
+
+    if (!triggerName) {
+      if (!trigger.hasAttribute('aria-labelledby')) {
+        trigger.setAttribute('aria-labelledby', targetId);
+      }
+      continue;
+    }
+
+    const opensOnActivate =
+      trigger.getAttribute('popovertarget') === targetId ||
+      trigger.getAttribute('commandfor') === targetId;
+
+    if (opensOnActivate) {
+      if (!trigger.hasAttribute('aria-expanded') || ownedInterestTriggers.has(trigger)) {
+        trigger.setAttribute('aria-expanded', String(isPopoverCurrentlyOpen(hint)));
+        ownedInterestTriggers.add(trigger);
+      }
+    } else if (!trigger.hasAttribute('aria-describedby')) {
+      trigger.setAttribute('aria-describedby', targetId);
+    }
+  }
+}
+
+document.addEventListener(
+  'toggle',
+  (event) => {
+    const popoverEl = event.target;
+    if (!(popoverEl instanceof HTMLElement) || !popoverEl.id) return;
+    const isOpen = event.newState ? event.newState === 'open' : isPopoverCurrentlyOpen(popoverEl);
+    for (const trigger of document.querySelectorAll(`[interestfor="${CSS.escape(popoverEl.id)}"]`)) {
+      if (ownedInterestTriggers.has(trigger)) {
+        trigger.setAttribute('aria-expanded', String(isOpen));
+      }
+    }
+  },
+  true,
+);
+
+function installOverlayPolyfillsAndFallbacks() {
+  wireInterestHints(document);
+
+  if (!Object.hasOwn(HTMLElement.prototype, 'popover')) {
+    import('https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover.min.js').catch(() => {});
+  } else {
+    const probe = document.createElement('div');
+    probe.popover = 'hint';
+    if (probe.popover !== 'hint') {
+      document.addEventListener(
+        'beforetoggle',
+        ({ target, newState }) => {
+          if (!(target instanceof HTMLElement) || !target.id) return;
+          const isToggletip =
+            target.getAttribute('popover') === 'hint' &&
+            document.querySelector(`[popovertarget="${CSS.escape(target.id)}"]`);
+          if (newState === 'open' && isToggletip) {
+            target.popover = 'auto';
+          }
+        },
+        true,
+      );
+    }
+  }
+
+  if (!('interestForElement' in HTMLButtonElement.prototype)) {
+    import('https://unpkg.com/interestfor@latest').catch(() => {});
+  }
+
+  if (!('commandForElement' in HTMLButtonElement.prototype)) {
+    import('https://esm.run/invokers-polyfill').catch(() => {});
+  }
+
+  if (!('closedBy' in HTMLDialogElement.prototype)) {
+    const isOutside = (e, dialog) => {
+      const r = dialog.getBoundingClientRect();
+      return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+    };
+    for (const dialog of document.querySelectorAll('dialog[closedby="any"]')) {
+      let pressedOutside = false;
+      dialog.addEventListener('pointerdown', (e) => {
+        pressedOutside = isOutside(e, dialog);
+      });
+      dialog.addEventListener('pointerup', (e) => {
+        if (pressedOutside && isOutside(e, dialog)) {
+          dialog.close();
+        }
+      });
+    }
+  }
+}
+
+// ============================================================================
+// 100% Static Local Rain & Snow Awakenings (IndexedDB + Service Worker)
+// ============================================================================
+
+const IDB_NAME = 'overworld_db';
+const IDB_STORE = 'kv';
+const ALERT_PREFS_KEY = 'alert_prefs';
+const PRECIP_SYNC_TAG = 'overworld-precip-check';
+
+let swRegistrationPromise = null;
+let alertsFeedbackTimer = null;
+let cachedAlertPrefs = {
+  enabled: false,
+  threshold: 35,
+  location: null,
+  unit: appState.unit,
+  lastNotifiedKey: null,
+  lastCheckedAt: null,
+};
+
+function openAppDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function readAlertPrefs() {
+  try {
+    const db = await openAppDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(ALERT_PREFS_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function writeAlertPrefs(nextPrefs) {
+  cachedAlertPrefs = { ...cachedAlertPrefs, ...nextPrefs };
+  try {
+    const db = await openAppDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(cachedAlertPrefs, ALERT_PREFS_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(reqError(tx));
+    });
+  } catch {
+    // Ignore private-browsing IndexedDB restrictions
+  }
+  renderAlertPrefsUi();
+}
+
+function reqError(tx) {
+  return tx?.error || new Error('IndexedDB transaction failed');
+}
+
+function showAlertsFeedback(msg) {
+  if (!els.alertsFeedback) return;
+  clearTimeout(alertsFeedbackTimer);
+  els.alertsFeedback.textContent = msg;
+  els.alertsFeedback.hidden = !msg;
+  if (msg) {
+    alertsFeedbackTimer = setTimeout(() => {
+      els.alertsFeedback.hidden = true;
+    }, 5200);
+  }
+}
+
+async function ensureServiceWorker() {
+  if (!('serviceWorker' in navigator)) return null;
+  if (!swRegistrationPromise) {
+    swRegistrationPromise = navigator.serviceWorker.register('./sw.js').catch(() => null);
+  }
+  return swRegistrationPromise;
+}
+
+async function registerBackgroundPrecipWakeup(reg) {
+  if (!reg) return;
+  if ('periodicSync' in reg) {
+    try {
+      if (navigator.permissions?.query) {
+        const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
+        if (status.state === 'granted') {
+          await reg.periodicSync.register(PRECIP_SYNC_TAG, { minInterval: 12 * 60 * 60 * 1000 });
+        }
+      } else {
+        await reg.periodicSync.register(PRECIP_SYNC_TAG, { minInterval: 12 * 60 * 60 * 1000 });
+      }
+    } catch {
+      // Best-effort periodic background sync
+    }
+  }
+  if ('sync' in reg) {
+    try {
+      await reg.sync.register(PRECIP_SYNC_TAG);
+    } catch {
+      // Optional one-shot sync
+    }
+  }
+}
+
+async function sendSwMessage(type) {
+  const reg = await ensureServiceWorker();
+  const worker = reg?.active || reg?.waiting || reg?.installing || navigator.serviceWorker?.controller;
+  if (!worker) return null;
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const timer = setTimeout(() => resolve(null), 7000);
+    channel.port1.onmessage = (ev) => {
+      clearTimeout(timer);
+      resolve(ev.data);
+    };
+    worker.postMessage({ type }, [channel.port2]);
+  });
+}
+
+function serializeOpenLocation() {
+  return {
+    name: appState.location.name,
+    admin1: appState.location.admin1 || '',
+    countryCode: appState.location.countryCode || '',
+    lat: appState.location.lat,
+    lon: appState.location.lon,
+  };
+}
+
+function renderAlertPrefsUi() {
+  const active = Boolean(cachedAlertPrefs.enabled) && typeof Notification !== 'undefined' && Notification.permission === 'granted';
+  if (els.alertsBtn) {
+    els.alertsBtn.setAttribute('aria-pressed', String(active));
+  }
+  if (els.alertsDot) {
+    els.alertsDot.hidden = !active;
+  }
+}
+
+function syncAlertsUiWithLocation() {
+  const openLoc = serializeOpenLocation();
+  const locChanged = !cachedAlertPrefs.location || !isSameLocation(cachedAlertPrefs.location, openLoc);
+  if (cachedAlertPrefs.enabled && (locChanged || cachedAlertPrefs.unit !== appState.unit)) {
+    void writeAlertPrefs({ location: openLoc, unit: appState.unit });
+  } else {
+    renderAlertPrefsUi();
+  }
+}
+
+els.alertsBtn?.addEventListener('click', async () => {
+  const currentlyActive =
+    Boolean(cachedAlertPrefs.enabled) && typeof Notification !== 'undefined' && Notification.permission === 'granted';
+
+  if (currentlyActive) {
+    const reg = await ensureServiceWorker();
+    if (reg && 'periodicSync' in reg) {
+      await reg.periodicSync.unregister(PRECIP_SYNC_TAG).catch(() => {});
+    }
+    await writeAlertPrefs({ enabled: false });
+    showAlertsFeedback('Rain & snow alerts off.');
+    return;
+  }
+
+  if (typeof Notification === 'undefined') {
+    showAlertsFeedback('Install Overworld to your Home Screen (or use Android Chrome) to enable alerts.');
+    return;
+  }
+
+  const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+  if (perm !== 'granted') {
+    await writeAlertPrefs({ enabled: false });
+    showAlertsFeedback('Allow notifications in browser settings to receive rain & snow heads-ups.');
+    return;
+  }
+
+  const openLoc = serializeOpenLocation();
+  await writeAlertPrefs({
+    enabled: true,
+    threshold: 35,
+    location: openLoc,
+    unit: appState.unit,
+  });
+
+  const reg = await ensureServiceWorker();
+  await registerBackgroundPrecipWakeup(reg);
+  showAlertsFeedback(`Armed for ${openLoc.name} · notifies only when rain or snow is likely tomorrow.`);
+  if (new Date().getHours() >= 15) {
+    void sendSwMessage('CHECK_PRECIP_NOW');
+  }
+});
+
+async function initStaticAwakenings() {
+  const saved = await readAlertPrefs();
+  if (saved) {
+    cachedAlertPrefs = { ...cachedAlertPrefs, ...saved };
+  }
+  renderAlertPrefsUi();
+
+  const reg = await ensureServiceWorker();
+  if (cachedAlertPrefs.enabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    await writeAlertPrefs({ location: serializeOpenLocation(), unit: appState.unit });
+    await registerBackgroundPrecipWakeup(reg);
+    if (new Date().getHours() >= 15) {
+      void sendSwMessage('CHECK_PRECIP_NOW');
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!cachedAlertPrefs.enabled || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const ageMs = Date.now() - Number(cachedAlertPrefs.lastCheckedAt || 0);
+    if (new Date().getHours() >= 15 && ageMs > 4 * 60 * 60 * 1000) {
+      void sendSwMessage('CHECK_PRECIP_NOW');
     }
   });
 }
@@ -1682,7 +2061,9 @@ if (els.sceneDebugDialog && !('closedBy' in HTMLDialogElement.prototype)) {
 // ============================================================================
 
 (() => {
+  installOverlayPolyfillsAndFallbacks();
   void ensureTemporal();
+  void initStaticAwakenings();
   loadWeatherForLocation(appState.location);
   if (new URLSearchParams(window.location.search).get('debug') === '1') {
     openSceneDebugDialog();

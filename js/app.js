@@ -21,10 +21,13 @@ import {
   evaluateRadarInterest,
   fetchForecast,
   fetchNwsAlerts,
+  formatCompactAccum,
   formatPlaceLabel,
+  formatPrecip,
   formatSpeed,
   formatTemp,
   getCachedForecast,
+  normalizeSnowInches,
   reverseGeocode,
   searchLocations,
 } from './api.js';
@@ -287,6 +290,7 @@ const els = {
   hourlyPrev: document.getElementById('hourly-prev'),
   hourlyNext: document.getElementById('hourly-next'),
   hourlyList: document.getElementById('hourly-list'),
+  dailyTakeaway: document.getElementById('daily-takeaway'),
   dailyPrev: document.getElementById('daily-prev'),
   dailyNext: document.getElementById('daily-next'),
   dailyList: document.getElementById('daily-list'),
@@ -337,6 +341,15 @@ function syncRadarToggleCta() {
   els.radarToggleCta.textContent = els.radarDisclosure.open ? 'Hide Map' : 'Show Map';
 }
 
+function formatNwsParagraphs(raw) {
+  if (!raw) return [];
+  return String(raw)
+    .trim()
+    .split(/\n\s*\n+|\n(?=\*\s*[A-Z])|\n(?=\.\.\.[A-Z])/)
+    .map((chunk) => chunk.replace(/\s*\n\s*/g, ' ').trim())
+    .filter(Boolean);
+}
+
 function renderAlerts(alerts) {
   if (!alerts.length) {
     els.alertsSlot.hidden = true;
@@ -358,15 +371,30 @@ function renderAlerts(alerts) {
 
     const body = document.createElement('div');
     body.className = 'alert-body';
-    if (alert.headline) {
+    if (alert.headline && alert.headline.trim() !== alert.event.trim()) {
       const p = document.createElement('p');
-      p.textContent = alert.headline;
+      p.className = 'alert-headline';
+      p.textContent = alert.headline.replace(/\s*\n\s*/g, ' ').trim();
       body.appendChild(p);
     }
-    if (alert.instruction || alert.description) {
+
+    for (const para of formatNwsParagraphs(alert.description)) {
       const p = document.createElement('p');
-      p.textContent = (alert.instruction || alert.description).slice(0, 320);
+      p.textContent = para;
       body.appendChild(p);
+    }
+
+    if (alert.instruction && alert.instruction.trim() !== (alert.description || '').trim()) {
+      const instBox = document.createElement('div');
+      instBox.className = 'alert-instruction';
+      for (const para of formatNwsParagraphs(alert.instruction)) {
+        const p = document.createElement('p');
+        p.textContent = para;
+        instBox.appendChild(p);
+      }
+      if (instBox.childElementCount > 0) {
+        body.appendChild(instBox);
+      }
     }
 
     details.append(summary, body);
@@ -377,39 +405,66 @@ function renderAlerts(alerts) {
   els.alertsSlot.hidden = false;
 }
 
-function buildHourlyTakeaway(hourly, startIdx) {
+function buildHourlyTakeaway(hourly, startIdx, unit = 'F', hourlyUnits = {}) {
   const endIdx = Math.min(hourly.time.length, startIdx + 24);
   let firstWet = -1;
   let firstDryAfterWet = -1;
+  let totalRainIn = 0;
+  let totalSnowIn = 0;
+  let maxHourlyRainIn = 0;
+  let anySnowWet = false;
+  const snowUnit = hourlyUnits?.snowfall || 'inch';
+
   const startingWet =
     Number(hourly.precipitation[startIdx] ?? 0) > 0.01 ||
     Number(hourly.precipitation_probability[startIdx] ?? 0) >= 45 ||
     Number(hourly.weather_code[startIdx] ?? 0) >= 51;
 
-  for (let i = startIdx + 1; i < endIdx; i += 1) {
-    const isWet =
-      Number(hourly.precipitation[i] ?? 0) > 0.01 ||
-      Number(hourly.precipitation_probability[i] ?? 0) >= 40 ||
-      Number(hourly.weather_code[i] ?? 0) >= 51;
-    if (!startingWet && isWet && firstWet === -1) {
-      firstWet = i;
-      break;
-    }
-    if (startingWet && !isWet && firstDryAfterWet === -1) {
-      firstDryAfterWet = i;
-      break;
+  for (let i = startIdx; i < endIdx; i += 1) {
+    const pIn = Number(hourly.precipitation[i] ?? 0);
+    const sIn = normalizeSnowInches(hourly.snowfall?.[i] ?? 0, snowUnit);
+    const pop = Number(hourly.precipitation_probability[i] ?? 0);
+    const code = Number(hourly.weather_code[i] ?? 0);
+    const tempF = Number(hourly.temperature_2m[i] ?? 60);
+    totalRainIn += pIn;
+    totalSnowIn += sIn;
+    if (pIn > maxHourlyRainIn) maxHourlyRainIn = pIn;
+
+    const isWet = pIn > 0.01 || pop >= 40 || code >= 51;
+    if (isWet && isSnowPrecip(code, tempF)) anySnowWet = true;
+
+    if (i > startIdx) {
+      if (!startingWet && isWet && firstWet === -1) {
+        firstWet = i;
+      }
+      if (startingWet && !isWet && firstDryAfterWet === -1) {
+        firstDryAfterWet = i;
+      }
     }
   }
 
+  let totalSuffix = '';
+  if (anySnowWet && totalSnowIn >= 0.1) {
+    const snowLabel = unit === 'C' ? `${(totalSnowIn * 2.54).toFixed(1)} cm` : `${totalSnowIn.toFixed(1)}"`;
+    totalSuffix = ` · ~${snowLabel} snow in 24h`;
+  } else if (totalRainIn >= 0.01) {
+    totalSuffix = ` · ${formatPrecip(totalRainIn, unit)} in 24h`;
+  } else if ((startingWet || firstWet !== -1) && totalRainIn > 0) {
+    totalSuffix = unit === 'C' ? ' · <0.3 mm in 24h' : ' · <0.01" in 24h';
+  }
+
+  const isMostlyDrizzle = !anySnowWet && maxHourlyRainIn < 0.03 && totalRainIn < 0.08;
+  const wetNoun = anySnowWet ? 'Snow' : isMostlyDrizzle ? 'Light drizzle' : 'Rain';
+
   if (!startingWet && firstWet !== -1) {
     const { hour } = parsePlainDateTime(hourly.time[firstWet]);
-    return `Precipitation likely around ${formatHour12(hour)}`;
+    return `${wetNoun} likely around ${formatHour12(hour)}${totalSuffix}`;
   }
   if (startingWet && firstDryAfterWet !== -1) {
     const { hour } = parsePlainDateTime(hourly.time[firstDryAfterWet]);
-    return `Tapering off around ${formatHour12(hour)}`;
+    return `Tapering off around ${formatHour12(hour)}${totalSuffix}`;
   }
-  if (startingWet) return 'Periods of precipitation over the next 24h';
+  if (startingWet) return `${anySnowWet ? 'Periods of snow' : isMostlyDrizzle ? 'Periods of drizzle' : 'Periods of rain'} over 24h${totalSuffix}`;
   return 'Dry conditions expected over the next 24h';
 }
 
@@ -511,7 +566,10 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
   });
 
   // Next 24 hours (horizontal connected elevation strip)
-  els.hourlyTakeaway.textContent = buildHourlyTakeaway(hourly, currentHourIdx);
+  els.hourlyTakeaway.textContent = buildHourlyTakeaway(hourly, currentHourIdx, unit, forecast.hourly_units);
+  if (els.dailyTakeaway) {
+    els.dailyTakeaway.textContent = unit === 'C' ? 'High / low · % & mm' : 'High / low · % & inches';
+  }
   const sliceEnd = Math.min(hourly.time.length, currentHourIdx + 24);
   const sliceTemps = [];
   for (let i = currentHourIdx; i < sliceEnd; i += 1) {
@@ -526,6 +584,23 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     return 43 - ratio * 21;
   });
 
+  const hourlySnowUnit = forecast.hourly_units?.snowfall || 'inch';
+  const hourlyAccums = [];
+  for (let i = currentHourIdx; i < sliceEnd; i += 1) {
+    const offset = i - currentHourIdx;
+    const tempF = sliceTemps[offset];
+    const pop = Math.round(Number(hourly.precipitation_probability[i] ?? 0));
+    const precipIn = Number(hourly.precipitation[i] ?? 0);
+    const snowIn = normalizeSnowInches(hourly.snowfall?.[i] ?? 0, hourlySnowUnit);
+    const wmoCode = hourly.weather_code[i];
+    const snowChance = isSnowPrecip(wmoCode, tempF);
+    const showAccum = precipIn >= 0.01 || snowIn >= 0.05 || ((pop >= 25 || wmoCode >= 51) && (precipIn >= 0.004 || (wmoCode >= 51 && wmoCode <= 57)));
+    hourlyAccums.push(
+      showAccum ? formatCompactAccum(precipIn, unit, { snowInches: snowIn, isSnow: snowChance, wmoCode }) : '',
+    );
+  }
+  const anyHourlyAccum = hourlyAccums.some(Boolean);
+
   const hourCards = [];
   for (let i = currentHourIdx; i < sliceEnd; i += 1) {
     const offset = i - currentHourIdx;
@@ -534,6 +609,7 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     const precipIn = Number(hourly.precipitation[i] ?? 0);
     const wmoCode = hourly.weather_code[i];
     const isDayHr = hourly.is_day[i];
+    const accumLabel = hourlyAccums[offset];
     const { hour } = parsePlainDateTime(hourly.time[i]);
     const timeLabelCompact = offset === 0 ? 'Now' : formatHourCompact(hour);
     const timeLabelFull = offset === 0 ? 'Now' : formatHour12(hour);
@@ -569,7 +645,9 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     tipTitle.textContent = `${timeLabelFull} · ${iconMeta.label}`;
     const tipSub = document.createElement('span');
     tipSub.className = 'voxel-tooltip-sub';
-    tipSub.textContent = `${iconMeta.cue} · ${pop}% chance of ${precipNoun}`;
+    tipSub.textContent = accumLabel
+      ? `${iconMeta.cue} · ${pop}% chance · ${accumLabel} ${precipNoun}`
+      : `${iconMeta.cue} · ${pop}% chance of ${precipNoun}`;
     tipEl.append(tipTitle, tipSub);
 
     const curveWrap = document.createElement('div');
@@ -591,7 +669,15 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     popSpan.className = popClasses.join(' ');
     popSpan.innerHTML = `${renderPrecipGlyph(snowChance)}<span>${pop}%</span><span class="visually-hidden"> chance of ${precipNoun}</span>`;
 
-    li.append(timeSpan, iconBtn, tipEl, curveWrap, popSpan);
+    if (anyHourlyAccum) {
+      const accumSpan = document.createElement('span');
+      accumSpan.className = accumLabel ? 'hour-accum' : 'hour-accum is-empty';
+      accumSpan.textContent = accumLabel;
+      if (!accumLabel) accumSpan.setAttribute('aria-hidden', 'true');
+      li.append(timeSpan, iconBtn, tipEl, curveWrap, popSpan, accumSpan);
+    } else {
+      li.append(timeSpan, iconBtn, tipEl, curveWrap, popSpan);
+    }
     hourCards.push(li);
   }
   els.hourlyList.replaceChildren(...hourCards);
@@ -602,6 +688,24 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
   const weekLow = Math.min(...daily.temperature_2m_min.slice(0, dayCount).map(Number));
   const weekHigh = Math.max(...daily.temperature_2m_max.slice(0, dayCount).map(Number));
   const weekSpan = Math.max(1, weekHigh - weekLow);
+  const dailySnowUnit = forecast.daily_units?.snowfall_sum || 'inch';
+
+  const dailyAccums = [];
+  for (let i = 0; i < dayCount; i += 1) {
+    const lowF = Number(daily.temperature_2m_min[i]);
+    const highF = Number(daily.temperature_2m_max[i]);
+    const midTempF = (lowF + highF) / 2;
+    const pop = Math.round(Number(daily.precipitation_probability_max[i] ?? 0));
+    const precipSum = Number(daily.precipitation_sum[i] ?? 0);
+    const snowSum = normalizeSnowInches(daily.snowfall_sum?.[i] ?? 0, dailySnowUnit);
+    const wmoCode = daily.weather_code[i];
+    const snowChance = isSnowPrecip(wmoCode, highF <= 34 ? highF : midTempF);
+    const showAccum = precipSum >= 0.01 || snowSum >= 0.05 || (pop >= 25 && precipSum >= 0.004);
+    dailyAccums.push(
+      showAccum ? formatCompactAccum(precipSum, unit, { snowInches: snowSum, isSnow: snowChance, wmoCode }) : '',
+    );
+  }
+  const anyDailyAccum = dailyAccums.some(Boolean);
 
   const dayCards = [];
   for (let i = 0; i < dayCount; i += 1) {
@@ -610,6 +714,7 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     const pop = Math.round(Number(daily.precipitation_probability_max[i] ?? 0));
     const precipSum = Number(daily.precipitation_sum[i] ?? 0);
     const wmoCode = daily.weather_code[i];
+    const accumLabel = dailyAccums[i];
     const bottomPct = ((lowF - weekLow) / weekSpan) * 100;
     const spanPct = ((highF - lowF) / weekSpan) * 100;
     const dayLabel = i === 0 ? 'Today' : getWeekdayShort(daily.time[i]);
@@ -646,7 +751,9 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     tipTitle.textContent = `${dayLabel} · ${iconMeta.label}`;
     const tipSub = document.createElement('span');
     tipSub.className = 'voxel-tooltip-sub';
-    tipSub.textContent = `${iconMeta.cue} · ${pop}% chance of ${precipNoun}`;
+    tipSub.textContent = accumLabel
+      ? `${iconMeta.cue} · ${pop}% chance · ${accumLabel} total`
+      : `${iconMeta.cue} · ${pop}% chance of ${precipNoun}`;
     tipEl.append(tipTitle, tipSub);
 
     const vbarCol = document.createElement('div');
@@ -686,7 +793,15 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     popSpan.className = popClasses.join(' ');
     popSpan.innerHTML = `${renderPrecipGlyph(snowChance)}<span>${pop}%</span><span class="visually-hidden"> chance of ${precipNoun}</span>`;
 
-    li.append(daySpan, iconBtn, tipEl, vbarCol, popSpan);
+    if (anyDailyAccum) {
+      const accumSpan = document.createElement('span');
+      accumSpan.className = accumLabel ? 'hour-accum' : 'hour-accum is-empty';
+      accumSpan.textContent = accumLabel;
+      if (!accumLabel) accumSpan.setAttribute('aria-hidden', 'true');
+      li.append(daySpan, iconBtn, tipEl, vbarCol, popSpan, accumSpan);
+    } else {
+      li.append(daySpan, iconBtn, tipEl, vbarCol, popSpan);
+    }
     dayCards.push(li);
   }
   els.dailyList.replaceChildren(...dayCards);

@@ -2,7 +2,7 @@
 // Overworld — 100% Static Service Worker (Offline App Shell + Local Awakenings)
 // ============================================================================
 
-const SHELL_CACHE = 'overworld-shell-v3';
+const SHELL_CACHE = 'overworld-shell-v4';
 const PRECIP_SYNC_TAG = 'overworld-precip-check';
 const DB_NAME = 'overworld_db';
 const DB_STORE = 'kv';
@@ -21,6 +21,7 @@ const APP_SHELL_URLS = [
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/badge-96.png',
 ];
 
 // ============================================================================
@@ -237,7 +238,12 @@ async function checkTomorrowPrecipAndNotify({ forceTest = false } = {}) {
     ? `☀️ Quiet skies tomorrow in ${loc.name} (Test)`
     : `${info.glyph} ${info.noun} heads-up for ${dayLabel} in ${loc.name}`;
 
-  const amountLabel = fmtPrecipAmount(precipIn, unit);
+  const amountLabel =
+    info.kind === 'snow' && snowIn >= 0.1
+      ? unit === 'C'
+        ? ` (~${(snowIn * 2.54).toFixed(1)} cm)`
+        : ` (~${snowIn.toFixed(1)}")`
+      : fmtPrecipAmount(precipIn, unit);
   const body = forceTest && !notable
     ? `Only ${pop}% precip chance tomorrow (${fmtTemp(highF, unit)} / ${fmtTemp(lowF, unit)}) — real alerts stay silent on days like this.`
     : `${pop}% chance of ${info.noun.toLowerCase()}${amountLabel} · High ${fmtTemp(highF, unit)} / Low ${fmtTemp(lowF, unit)}`;
@@ -245,7 +251,7 @@ async function checkTomorrowPrecipAndNotify({ forceTest = false } = {}) {
   await self.registration.showNotification(title, {
     body,
     icon: './icons/icon-192.png',
-    badge: './icons/icon-192.png',
+    badge: './icons/badge-96.png',
     tag: forceTest ? 'overworld-test-precip' : `overworld-precip-${tomorrowDate}`,
     renotify: Boolean(forceTest),
     data: { url: buildCityUrl(loc) },

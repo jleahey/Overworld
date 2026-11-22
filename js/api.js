@@ -42,6 +42,40 @@ export function formatPrecip(inches, unit = 'F') {
   return unit === 'C' ? `${(v * 25.4).toFixed(1)} mm` : `${v.toFixed(2)}"`;
 }
 
+export function normalizeSnowInches(rawVal, unitHint = 'inch') {
+  const v = Number(rawVal ?? 0);
+  if (!Number.isFinite(v) || v <= 0) return 0;
+  return unitHint === 'cm' ? v / 2.54 : v;
+}
+
+export function formatCompactAccum(precipInches, unit = 'F', { snowInches = 0, isSnow = false, wmoCode = 0 } = {}) {
+  const code = Number(wmoCode ?? 0);
+  const snowIn = Number(snowInches ?? 0);
+  const rainIn = Number(precipInches ?? 0);
+
+  if (isSnow && snowIn >= 0.04) {
+    if (unit === 'C') {
+      const cm = snowIn * 2.54;
+      if (cm < 0.2) return '<0.2cm';
+      return cm < 10 ? `${cm.toFixed(1)}cm` : `${Math.round(cm)}cm`;
+    }
+    if (snowIn < 0.1) return '<0.1"';
+    return snowIn < 10 ? `${snowIn.toFixed(1)}"` : `${Math.round(snowIn)}"`;
+  }
+
+  const activeDrizzleCode = code >= 51 && code <= 57;
+  if (unit === 'C') {
+    const mm = rainIn * 25.4;
+    if (mm < 0.1) return activeDrizzleCode ? '<0.2mm' : '';
+    if (mm < 0.2) return '<0.2mm';
+    return mm < 10 ? `${mm.toFixed(1)}mm` : `${Math.round(mm)}mm`;
+  }
+
+  if (rainIn < 0.004) return activeDrizzleCode ? '<0.01"' : '';
+  if (rainIn < 0.01) return '<0.01"';
+  return rainIn < 10 ? `${rainIn.toFixed(2)}"` : `${rainIn.toFixed(1)}"`;
+}
+
 export function formatPlaceLabel(loc) {
   const parts = [];
   if (loc.admin1) {
@@ -57,7 +91,7 @@ export function formatPlaceLabel(loc) {
 }
 
 function cacheKey(lat, lon) {
-  return `ws_cache_v4_${Number(lat).toFixed(2)}_${Number(lon).toFixed(2)}`;
+  return `ws_cache_v5_${Number(lat).toFixed(2)}_${Number(lon).toFixed(2)}`;
 }
 
 export function getCachedForecast(lat, lon) {
@@ -192,8 +226,8 @@ export async function fetchForecast(lat, lon) {
     current: 'temperature_2m,apparent_temperature,relative_humidity_2m,uv_index,is_day,precipitation,weather_code,wind_speed_10m,wind_gusts_10m',
     minutely_15: 'precipitation,weather_code',
     forecast_minutely_15: '8',
-    hourly: 'temperature_2m,precipitation_probability,precipitation,weather_code,is_day',
-    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset',
+    hourly: 'temperature_2m,precipitation_probability,precipitation,snowfall,weather_code,is_day',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,snowfall_sum,wind_speed_10m_max,sunrise,sunset',
     temperature_unit: 'fahrenheit',
     wind_speed_unit: 'mph',
     precipitation_unit: 'inch',
@@ -391,9 +425,12 @@ export function describeImmediatePrecip(forecast, currentHourIndex = 0, unit = '
       }
     }
     const rate = Math.max(Number(current.precipitation || 0), Number(m15?.precipitation?.[mStart] || 0));
+    const codeNow = Number(current.weather_code ?? 0);
+    const snowNow = (codeNow >= 71 && codeNow <= 77) || codeNow === 85 || codeNow === 86;
+    const drizzleNow = !snowNow && ((codeNow >= 51 && codeNow <= 57) || (rate > 0 && rate < 0.03));
     return {
-      label: 'Rain Now',
-      value: rate > 0 ? `${formatPrecip(rate, unit)}/hr` : 'Steady',
+      label: snowNow ? 'Snow Now' : drizzleNow ? 'Drizzle Now' : 'Rain Now',
+      value: rate > 0 ? `${formatPrecip(rate, unit)}/hr` : drizzleNow ? 'Light mist' : 'Steady',
     };
   }
 

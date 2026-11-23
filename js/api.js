@@ -37,9 +37,17 @@ export function formatSpeed(mph, unit = 'F') {
   return unit === 'C' ? `${Math.round(v * 1.60934)} km/h` : `${Math.round(v)} mph`;
 }
 
+function stripLeadingZeroDecimal(numStr) {
+  return String(numStr).startsWith('0.') ? String(numStr).slice(1) : String(numStr);
+}
+
 export function formatPrecip(inches, unit = 'F') {
   const v = Number(inches);
-  return unit === 'C' ? `${(v * 25.4).toFixed(1)} mm` : `${v.toFixed(2)}"`;
+  if (unit === 'C') {
+    const mm = v * 25.4;
+    return mm < 1 ? `${stripLeadingZeroDecimal(mm.toFixed(1))} mm` : `${mm.toFixed(1)} mm`;
+  }
+  return v < 1 ? `${stripLeadingZeroDecimal(v.toFixed(2))}"` : `${v.toFixed(2)}"`;
 }
 
 export function normalizeSnowInches(rawVal, unitHint = 'inch') {
@@ -56,24 +64,24 @@ export function formatCompactAccum(precipInches, unit = 'F', { snowInches = 0, i
   if (isSnow && snowIn >= 0.04) {
     if (unit === 'C') {
       const cm = snowIn * 2.54;
-      if (cm < 0.2) return '<0.2cm';
-      return cm < 10 ? `${cm.toFixed(1)}cm` : `${Math.round(cm)}cm`;
+      if (cm < 0.2) return '<.2cm';
+      return cm < 10 ? `${stripLeadingZeroDecimal(cm.toFixed(1))}cm` : `${Math.round(cm)}cm`;
     }
-    if (snowIn < 0.1) return '<0.1"';
-    return snowIn < 10 ? `${snowIn.toFixed(1)}"` : `${Math.round(snowIn)}"`;
+    if (snowIn < 0.1) return '<.1"';
+    return snowIn < 10 ? `${stripLeadingZeroDecimal(snowIn.toFixed(1))}"` : `${Math.round(snowIn)}"`;
   }
 
   const activeDrizzleCode = code >= 51 && code <= 57;
   if (unit === 'C') {
     const mm = rainIn * 25.4;
-    if (mm < 0.1) return activeDrizzleCode ? '<0.2mm' : '';
-    if (mm < 0.2) return '<0.2mm';
-    return mm < 10 ? `${mm.toFixed(1)}mm` : `${Math.round(mm)}mm`;
+    if (mm < 0.1) return activeDrizzleCode ? '<.2mm' : '';
+    if (mm < 0.2) return '<.2mm';
+    return mm < 10 ? `${stripLeadingZeroDecimal(mm.toFixed(1))}mm` : `${Math.round(mm)}mm`;
   }
 
-  if (rainIn < 0.004) return activeDrizzleCode ? '<0.01"' : '';
-  if (rainIn < 0.01) return '<0.01"';
-  return rainIn < 10 ? `${rainIn.toFixed(2)}"` : `${rainIn.toFixed(1)}"`;
+  if (rainIn < 0.004) return activeDrizzleCode ? '<.01"' : '';
+  if (rainIn < 0.01) return '<.01"';
+  return rainIn < 1 ? `${stripLeadingZeroDecimal(rainIn.toFixed(2))}"` : rainIn < 10 ? `${rainIn.toFixed(1)}"` : `${Math.round(rainIn)}"`;
 }
 
 export function formatPlaceLabel(loc) {

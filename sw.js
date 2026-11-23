@@ -2,7 +2,7 @@
 // Overworld — 100% Static Service Worker (Offline App Shell + Local Awakenings)
 // ============================================================================
 
-const SHELL_CACHE = 'overworld-shell-v4';
+const SHELL_CACHE = 'overworld-shell-v6';
 const PRECIP_SYNC_TAG = 'overworld-precip-check';
 const DB_NAME = 'overworld_db';
 const DB_STORE = 'kv';
@@ -70,7 +70,14 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(SHELL_CACHE)
-      .then((cache) => cache.addAll(APP_SHELL_URLS))
+      .then((cache) =>
+        Promise.all(
+          APP_SHELL_URLS.map(async (url) => {
+            const res = await fetch(new Request(url, { cache: 'no-cache' }));
+            if (res.ok) await cache.put(url, res);
+          }),
+        ),
+      )
       .catch(() => {})
       .then(() => self.skipWaiting()),
   );
@@ -96,7 +103,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     (async () => {
       try {
-        const fresh = await fetch(req);
+        const fresh = await fetch(req, { cache: 'no-cache' });
         if (fresh && fresh.ok) {
           const cache = await caches.open(SHELL_CACHE);
           cache.put(req, fresh.clone()).catch(() => {});
@@ -139,7 +146,9 @@ function fmtTemp(f, unit) {
 function fmtPrecipAmount(inches, unit) {
   const v = Number(inches || 0);
   if (v <= 0.01) return '';
-  return unit === 'C' ? ` (~${(v * 25.4).toFixed(1)} mm)` : ` (~${v.toFixed(2)}")`;
+  if (unit === 'C') return ` (~${(v * 25.4).toFixed(1)} mm)`;
+  const s = v < 1 ? v.toFixed(2).slice(1) : v.toFixed(2);
+  return ` (~${s}")`;
 }
 
 function classifyTomorrowPrecip(code, highF, lowF, snowSumIn = 0) {

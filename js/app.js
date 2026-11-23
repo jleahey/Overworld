@@ -30,6 +30,7 @@ import {
   normalizeSnowInches,
   reverseGeocode,
   searchLocations,
+  toUnitTemp,
 } from './api.js';
 import { createRadarController } from './radar.js';
 
@@ -116,6 +117,23 @@ function formatHourCompact(hour24) {
   const suffix = hour24 >= 12 ? 'p' : 'a';
   const h = hour24 % 12 || 12;
   return `${h}${suffix}`;
+}
+
+function renderAlignedTempHtml(fahrenheit, unit) {
+  const val = toUnitTemp(fahrenheit, unit);
+  const text = val < 0 ? `−${Math.abs(val)}` : String(val);
+  return `<span class="col-num">${text}</span><span class="col-unit">°</span>`;
+}
+
+function renderAlignedAccumHtml(label) {
+  if (!label) return '';
+  const m = label.match(/^(.+?)("|mm|cm)$/);
+  if (m) {
+    const core = m[1].replace('<', '&lt;');
+    const unitClass = m[2] === '"' ? 'col-unit' : 'col-unit accum-metric-unit';
+    return `<span class="col-num">${core}</span><span class="${unitClass}">${m[2]}</span>`;
+  }
+  return `<span class="col-num">${label.replace('<', '&lt;')}</span><span class="col-unit"></span>`;
 }
 
 function findCurrentHourIndex(hourlyTimes, currentTimeStr) {
@@ -450,7 +468,7 @@ function buildHourlyTakeaway(hourly, startIdx, unit = 'F', hourlyUnits = {}) {
   } else if (totalRainIn >= 0.01) {
     totalSuffix = ` · ${formatPrecip(totalRainIn, unit)} in 24h`;
   } else if ((startingWet || firstWet !== -1) && totalRainIn > 0) {
-    totalSuffix = unit === 'C' ? ' · <0.3 mm in 24h' : ' · <0.01" in 24h';
+    totalSuffix = unit === 'C' ? ' · <.3 mm in 24h' : ' · <.01" in 24h';
   }
 
   const isMostlyDrizzle = !anySnowWet && maxHourlyRainIn < 0.03 && totalRainIn < 0.08;
@@ -661,23 +679,36 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
       isFirst: offset === 0,
       isLast: offset === yCoords.length - 1,
     });
+    const curveTempSpan = document.createElement('span');
+    curveTempSpan.className = 'hour-curve-label col-metric';
+    curveTempSpan.style.setProperty('--curve-pct', `${((yCoords[offset] / 58) * 100).toFixed(1)}%`);
+    curveTempSpan.innerHTML = renderAlignedTempHtml(tempF, unit);
+    curveWrap.appendChild(curveTempSpan);
+
+    const precipGroup = document.createElement('div');
+    precipGroup.className = 'precip-group';
 
     const popSpan = document.createElement('span');
-    const popClasses = ['hour-pop'];
+    const popClasses = ['hour-pop', 'col-metric'];
     if (snowChance) popClasses.push('is-snow');
     if (pop < 15) popClasses.push('is-dry');
     popSpan.className = popClasses.join(' ');
-    popSpan.innerHTML = `${renderPrecipGlyph(snowChance)}<span>${pop}%</span><span class="visually-hidden"> chance of ${precipNoun}</span>`;
+    popSpan.innerHTML = `<span class="col-num">${renderPrecipGlyph(snowChance)}<span>${pop}</span></span><span class="col-unit">%</span><span class="visually-hidden"> chance of ${precipNoun}</span>`;
+    precipGroup.appendChild(popSpan);
 
     if (anyHourlyAccum) {
       const accumSpan = document.createElement('span');
-      accumSpan.className = accumLabel ? 'hour-accum' : 'hour-accum is-empty';
-      accumSpan.textContent = accumLabel;
-      if (!accumLabel) accumSpan.setAttribute('aria-hidden', 'true');
-      li.append(timeSpan, iconBtn, tipEl, curveWrap, popSpan, accumSpan);
-    } else {
-      li.append(timeSpan, iconBtn, tipEl, curveWrap, popSpan);
+      accumSpan.className = accumLabel ? 'hour-accum col-metric' : 'hour-accum col-metric is-empty';
+      if (accumLabel) {
+        accumSpan.innerHTML = renderAlignedAccumHtml(accumLabel);
+      } else {
+        accumSpan.innerHTML = '<span class="col-num">00</span><span class="col-unit">"</span>';
+        accumSpan.setAttribute('aria-hidden', 'true');
+      }
+      precipGroup.appendChild(accumSpan);
     }
+
+    li.append(timeSpan, iconBtn, tipEl, curveWrap, precipGroup);
     hourCards.push(li);
   }
   els.hourlyList.replaceChildren(...hourCards);
@@ -760,8 +791,8 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     vbarCol.className = 'day-vbar-col';
 
     const highSpan = document.createElement('span');
-    highSpan.className = 'day-high-label';
-    highSpan.textContent = formatTemp(highF, unit);
+    highSpan.className = 'day-high-label col-metric';
+    highSpan.innerHTML = renderAlignedTempHtml(highF, unit);
 
     const vtrack = document.createElement('div');
     vtrack.className = 'day-vtrack';
@@ -781,27 +812,35 @@ function renderAll({ freshnessLabel = 'Updated just now', isInitialLocationLoad 
     }
 
     const lowSpan = document.createElement('span');
-    lowSpan.className = 'day-low-label';
-    lowSpan.textContent = formatTemp(lowF, unit);
+    lowSpan.className = 'day-low-label col-metric';
+    lowSpan.innerHTML = renderAlignedTempHtml(lowF, unit);
 
     vbarCol.append(highSpan, vtrack, lowSpan);
 
+    const precipGroup = document.createElement('div');
+    precipGroup.className = 'precip-group';
+
     const popSpan = document.createElement('span');
-    const popClasses = ['hour-pop'];
+    const popClasses = ['hour-pop', 'col-metric'];
     if (snowChance) popClasses.push('is-snow');
     if (pop < 10) popClasses.push('is-dry');
     popSpan.className = popClasses.join(' ');
-    popSpan.innerHTML = `${renderPrecipGlyph(snowChance)}<span>${pop}%</span><span class="visually-hidden"> chance of ${precipNoun}</span>`;
+    popSpan.innerHTML = `<span class="col-num">${renderPrecipGlyph(snowChance)}<span>${pop}</span></span><span class="col-unit">%</span><span class="visually-hidden"> chance of ${precipNoun}</span>`;
+    precipGroup.appendChild(popSpan);
 
     if (anyDailyAccum) {
       const accumSpan = document.createElement('span');
-      accumSpan.className = accumLabel ? 'hour-accum' : 'hour-accum is-empty';
-      accumSpan.textContent = accumLabel;
-      if (!accumLabel) accumSpan.setAttribute('aria-hidden', 'true');
-      li.append(daySpan, iconBtn, tipEl, vbarCol, popSpan, accumSpan);
-    } else {
-      li.append(daySpan, iconBtn, tipEl, vbarCol, popSpan);
+      accumSpan.className = accumLabel ? 'hour-accum col-metric' : 'hour-accum col-metric is-empty';
+      if (accumLabel) {
+        accumSpan.innerHTML = renderAlignedAccumHtml(accumLabel);
+      } else {
+        accumSpan.innerHTML = '<span class="col-num">00</span><span class="col-unit">"</span>';
+        accumSpan.setAttribute('aria-hidden', 'true');
+      }
+      precipGroup.appendChild(accumSpan);
     }
+
+    li.append(daySpan, iconBtn, tipEl, vbarCol, precipGroup);
     dayCards.push(li);
   }
   els.dailyList.replaceChildren(...dayCards);

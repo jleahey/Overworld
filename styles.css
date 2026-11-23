@@ -1336,6 +1336,7 @@ details[open] > summary::before {
 }
 
 .hour-curve-wrap {
+  position: relative;
   display: grid;
   width: 100%;
   height: 56px;
@@ -1349,27 +1350,53 @@ details[open] > summary::before {
   display: block;
 }
 
-.hour-curve-temp {
-  fill: var(--ink-primary);
-  font-size: 11.5px;
-  font-weight: 760;
+.hour-curve-label {
+  position: absolute;
+  inset-inline: 0;
+  top: var(--curve-pct, 50%);
+  transform: translateY(calc(-100% - 0.36rem));
+  color: var(--ink-primary);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* Shared 2-track number|unit grid so digits & units lock to one vertical seam across every row */
+.col-metric {
+  width: 100%;
+  display: grid;
+  grid-template-columns: calc(50% + 1ch) minmax(0, 1fr);
+  align-items: baseline;
+  font-size: 0.72rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  line-height: 1.18;
+  white-space: nowrap;
+}
+
+.col-num {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.col-unit {
+  justify-self: start;
+  text-align: start;
 }
 
 .day-vbar-col {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
-  margin: 0.15rem 0;
+  gap: 0.22rem;
+  margin: 0.15rem 0 0;
 }
 
 .day-high-label {
-  font-size: 0.72rem;
-  font-weight: 760;
+  font-weight: 700;
   color: var(--ink-primary);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
 }
 
 .day-vtrack {
@@ -1405,11 +1432,19 @@ details[open] > summary::before {
 }
 
 .day-low-label {
-  font-size: 0.68rem;
-  font-weight: 650;
   color: var(--ink-secondary);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+}
+
+/* Distinct bottom zone separating precipitation (% + amount) from temperature above */
+.precip-group {
+  width: 100%;
+  margin-top: 0.34rem;
+  padding: 0.34rem 0 0.04rem;
+  border-top: 1px solid var(--slab-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.14rem;
 }
 
 .hour-pop {
@@ -1417,12 +1452,17 @@ details[open] > summary::before {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  font-size: 0.67rem;
-  font-weight: 700;
-  color: var(--rain);
+  font-size: 0.72rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  line-height: 1.18;
   white-space: nowrap;
-  line-height: 1.1;
+  color: var(--rain);
+}
+
+.hour-pop.col-metric {
+  display: grid;
+  gap: 0;
 }
 
 .hour-pop.is-snow {
@@ -1443,30 +1483,29 @@ details[open] > summary::before {
 
 .hour-pop.is-dry {
   color: var(--ink-muted);
-  font-weight: 550;
   opacity: 0.68;
 }
 
 .pop-glyph {
-  width: 8.5px;
-  height: 10px;
+  width: 8px;
+  height: 9.5px;
   flex-shrink: 0;
   display: block;
 }
 
 .pop-glyph.is-flake {
-  width: 9.5px;
-  height: 9.5px;
+  width: 9px;
+  height: 9px;
 }
 
 .hour-accum {
-  min-height: 0.78rem;
-  font-size: 0.62rem;
-  font-weight: 660;
+  min-block-size: 0.85rem;
   color: var(--ink-secondary);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.15;
-  white-space: nowrap;
+}
+
+.accum-metric-unit {
+  font-size: 0.85em;
+  padding-inline-start: 1px;
 }
 
 .hour-accum.is-empty {

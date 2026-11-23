@@ -1364,6 +1364,5 @@ export function renderHourlyCurveSegment({
       <polygon points="28,${yc - 4.6} 33,${yc - 2} 28,${yc + 0.5} 23,${yc - 2}" fill="${cTop}"/>
       <polygon points="23,${yc - 2} 28,${yc + 0.5} 28,${yc + 5} 23,${yc + 2.5}" fill="${cMain}"/>
       <polygon points="28,${yc + 0.5} 33,${yc - 2} 33,${yc + 2.5} 28,${yc + 5}" fill="${cLip}"/>
-      <text x="28" y="${yc - 8.5}" text-anchor="middle" class="hour-curve-temp">${tempLabel}</text>
     </svg>`;
 }
